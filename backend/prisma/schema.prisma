@@ -1,0 +1,106 @@
+// Prisma Schema for CaseStack
+// Module 0: Foundation
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Firm Entity
+model Firm {
+  id        String   @id @default(uuid())
+  name      String
+  country   String   // For pricing logic later
+  billingEnabled Boolean @default(false) // Firm-level billing flag
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  users     User[]
+  activityLogs ActivityLog[]
+  
+  @@map("firms")
+}
+
+// User Entity
+enum UserRole {
+  ADMIN
+  PARTNER
+  MANAGER
+  CONSULTANT
+  VIEWER
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String   // Hashed with bcrypt
+  firstName String
+  lastName  String
+  role      UserRole @default(CONSULTANT)
+  isActive  Boolean  @default(true)
+  
+  // Foreign Keys
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLoginAt DateTime?
+  
+  // Relations
+  activityLogs ActivityLog[]
+  
+  @@index([firmId])
+  @@index([email])
+  @@map("users")
+}
+
+// Immutable Activity Log
+enum ActivityAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  EXPORT
+  LOGIN
+  LOGOUT
+  PERMISSION_CHANGE
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  
+  // Who
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userEmail String   // Denormalized for immutability
+  userName  String   // Denormalized for immutability
+  userRole  UserRole // Denormalized for immutability
+  
+  // What
+  action    ActivityAction
+  entity    String   // e.g., "Report", "Client", "Invoice"
+  entityId  String?  // ID of the affected entity
+  details   String?  // JSON string with additional context
+  
+  // When
+  timestamp DateTime @default(now())
+  
+  // Context
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  ipAddress String?
+  userAgent String?
+  
+  @@index([userId])
+  @@index([firmId])
+  @@index([timestamp])
+  @@index([entity, entityId])
+  @@map("activity_logs")
+}
