@@ -3,6 +3,7 @@ import { useAuthStore } from './stores/authStore'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
+import CasesPage from './pages/CasesPage'
 import UsersPage from './pages/UsersPage'
 import ActivityLogsPage from './pages/ActivityLogsPage'
 import Layout from './components/Layout'
@@ -26,6 +27,7 @@ function App() {
       }>
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="cases" element={<CasesPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="activity-logs" element={<ActivityLogsPage />} />
       </Route>
