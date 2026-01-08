@@ -10,6 +10,8 @@ const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const firmRoutes = require('./routes/firm.routes');
 const activityLogRoutes = require('./routes/activityLog.routes');
+const clientRoutes = require('./routes/client.routes');
+const caseRoutes = require('./routes/case.routes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorHandler');
@@ -47,7 +49,9 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    service: 'CaseStack API'
+    service: 'CaseStack API',
+    version: '1.0.0',
+    modules: ['Foundation', 'Case Canvas']
   });
 });
 
@@ -56,6 +60,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/firms', firmRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
+app.use('/api/clients', clientRoutes);
+app.use('/api/cases', caseRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -72,6 +78,8 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`🚀 CaseStack API running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✅ Module 0: Foundation`);
+  console.log(`✅ Module 1: Case Canvas`);
 });
 
 module.exports = app;
