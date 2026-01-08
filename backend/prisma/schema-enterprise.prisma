@@ -1,0 +1,767 @@
+// ============================================
+// CASESTACK ENTERPRISE SCHEMA
+// Big-4 Ready | 10+ Year Lifecycle
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MODULE 1: FIRM & GOVERNANCE LAYER
+// ============================================
+
+model Firm {
+  id                    String   @id @default(cuid())
+  
+  // Identity
+  name                  String
+  legalName             String
+  registrationNumber    String   @unique
+  
+  // Location & Jurisdiction
+  country               String
+  operatingCountries    String[]
+  regulatoryJurisdictions String[]
+  
+  // Configuration
+  reportNumberPrefix    String   @default("RPT")
+  evidenceNumberPrefix  String   @default("EVD")
+  engagementNumberPrefix String  @default("ENG")
+  
+  // Retention Policy
+  retentionYears        Int      @default(10)
+  archiveAfterYears     Int      @default(7)
+  
+  // Compliance
+  regulatoryLicenses    Json?
+  certifications        Json?
+  insurancePolicies     Json?
+  
+  // Branding
+  logoPath              String?
+  primaryColor          String?
+  
+  // Relationships
+  users                 User[]
+  clients               Client[]
+  engagements           Engagement[]
+  reports               Report[]
+  evidence              Evidence[]
+  comments              Comment[]
+  reviews               Review[]
+  auditLogs             AuditLog[]
+  
+  // Audit Trail
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deleted               Boolean  @default(false)
+  deletedAt             DateTime?
+  deletedBy             String?
+  deleteJustification   String?  @db.Text
+  
+  @@index([country])
+  @@index([deleted])
+}
+
+// ============================================
+// MODULE 2: IDENTITY, ROLES & CONTROL
+// ============================================
+
+model User {
+  id                    String   @id @default(cuid())
+  
+  // Identity
+  email                 String   @unique
+  password              String   // Hashed with bcrypt (12 rounds)
+  
+  firstName             String
+  lastName              String
+  employeeId            String?  @unique
+  
+  // Role & Permissions
+  role                  UserRole
+  permissions           String[] // Explicit permissions array
+  
+  // Firm Association
+  firmId                String
+  firm                  Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Status
+  isActive              Boolean  @default(true)
+  lastLoginAt           DateTime?
+  failedLoginAttempts   Int      @default(0)
+  lockedUntil           DateTime?
+  
+  // Digital Signature (Partner only)
+  signatureHash         String?
+  signatureCert         String?
+  
+  // Password Management
+  passwordChangedAt     DateTime @default(now())
+  passwordResetToken    String?
+  passwordResetExpires  DateTime?
+  
+  // Relationships
+  clientsCreated        Client[] @relation("ClientCreatedBy")
+  engagementsLead       Engagement[] @relation("EngagementLead")
+  reportsLead           Report[] @relation("ReportLead")
+  reportsReviewing      Report[] @relation("ReportReviewer")
+  reportsApproving      Report[] @relation("ReportApprover")
+  evidenceCollected     Evidence[]
+  commentsAuthored      Comment[]
+  reviewsPerformed      Review[]
+  auditLogs             AuditLog[]
+  
+  // Audit Trail
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deleted               Boolean  @default(false)
+  deletedAt             DateTime?
+  
+  @@index([firmId])
+  @@index([role])
+  @@index([isActive])
+  @@index([employeeId])
+  @@index([email])
+}
+
+enum UserRole {
+  ADMIN
+  PARTNER
+  MANAGER
+  CONSULTANT
+  VIEWER
+}
+
+// ============================================
+// MODULE 3: IMMUTABLE ACTIVITY & AUDIT LOG
+// ============================================
+
+model AuditLog {
+  id                    String   @id @default(cuid())
+  
+  // Who
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id])
+  userRole              UserRole
+  userEmail             String
+  
+  // What
+  action                AuditAction
+  entity                String
+  entityId              String
+  
+  // When
+  timestamp             DateTime @default(now())
+  
+  // Where
+  ipAddress             String?
+  userAgent             String?
+  location              String?
+  
+  // State Capture
+  beforeState           Json?
+  afterState            Json?
+  beforeHash            String?  // SHA-256
+  afterHash             String?  // SHA-256
+  
+  // Context
+  metadata              Json?
+  reason                String?  @db.Text // Required for sensitive actions
+  
+  // Firm Isolation
+  firmId                String
+  firm                  Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  @@index([firmId])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([timestamp])
+  @@index([action])
+}
+
+enum AuditAction {
+  // Authentication
+  USER_LOGIN
+  USER_LOGOUT
+  USER_LOGIN_FAILED
+  USER_PASSWORD_CHANGED
+  USER_LOCKED
+  
+  // Report Lifecycle
+  REPORT_CREATED
+  REPORT_UPDATED
+  REPORT_DELETED
+  REPORT_SUBMITTED
+  REPORT_REVIEWED
+  REPORT_APPROVED
+  REPORT_REJECTED
+  REPORT_FINALIZED
+  REPORT_LOCKED
+  REPORT_UNLOCKED
+  REPORT_SIGNED
+  
+  // Sections
+  SECTION_ADDED
+  SECTION_UPDATED
+  SECTION_DELETED
+  SECTION_LOCKED
+  SECTION_UNLOCKED
+  SECTION_VERSION_CREATED
+  
+  // Evidence
+  EVIDENCE_ADDED
+  EVIDENCE_UPDATED
+  EVIDENCE_DELETED
+  EVIDENCE_VERIFIED
+  EVIDENCE_REJECTED
+  
+  // Reviews
+  REVIEW_CREATED
+  REVIEW_SUBMITTED
+  REVIEW_APPROVED
+  REVIEW_REJECTED
+  COMMENT_ADDED
+  COMMENT_RESOLVED
+  
+  // Clients & Engagements
+  CLIENT_CREATED
+  CLIENT_UPDATED
+  CLIENT_DELETED
+  ENGAGEMENT_CREATED
+  ENGAGEMENT_UPDATED
+  ENGAGEMENT_DELETED
+  ENGAGEMENT_FINALIZED
+  ENGAGEMENT_UNLOCKED
+  
+  // System
+  SETTINGS_CHANGED
+  PERMISSION_CHANGED
+  USER_ROLE_CHANGED
+  DATA_EXPORTED
+  AUDIT_LOG_ACCESSED
+  DOSSIER_GENERATED
+}
+
+// ============================================
+// MODULE 4: CLIENT MASTER & HISTORICAL MEMORY
+// ============================================
+
+model Client {
+  id                    String   @id @default(cuid())
+  
+  // Master Record (Immutable after first finalized engagement)
+  legalName             String
+  displayName           String
+  uniqueIdentifier      String   @unique // Client code
+  
+  // Classification
+  industry              String
+  sector                String?
+  country               String
+  
+  // Relationship Management
+  riskRating            RiskRating @default(MEDIUM)
+  relationshipStatus    ClientStatus @default(ACTIVE)
+  
+  // Internal Intelligence (Partner-level only)
+  internalNotes         String?  @db.Text
+  keyContacts           Json?
+  
+  // Firm Association
+  firmId                String
+  firm                  Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Created By
+  createdById           String
+  createdBy             User     @relation("ClientCreatedBy", fields: [createdById], references: [id])
+  
+  // Historical Memory
+  engagements           Engagement[]
+  reports               Report[]
+  firstEngagementDate   DateTime?
+  lastEngagementDate    DateTime?
+  totalEngagements      Int      @default(0)
+  
+  // Audit Trail
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deleted               Boolean  @default(false)
+  deletedAt             DateTime?
+  deletedBy             String?
+  deleteJustification   String?  @db.Text
+  
+  @@index([firmId])
+  @@index([uniqueIdentifier])
+  @@index([industry])
+  @@index([relationshipStatus])
+  @@index([deleted])
+}
+
+enum RiskRating {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  PROSPECT
+  FORMER
+}
+
+// ============================================
+// MODULE 5: ENGAGEMENT & REPORT LIFECYCLE
+// ============================================
+
+model Engagement {
+  id                    String   @id @default(cuid())
+  
+  // Core Identity
+  engagementNumber      String   @unique // ENG-2024-001
+  name                  String
+  year                  Int
+  type                  EngagementType
+  
+  // Client Association
+  clientId              String
+  client                Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  // Leadership
+  leadPartnerId         String
+  leadPartner           User     @relation("EngagementLead", fields: [leadPartnerId], references: [id])
+  
+  // Status Lifecycle
+  status                EngagementStatus @default(DRAFT)
+  
+  draftedAt             DateTime?
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  finalizedAt           DateTime?
+  lockedAt              DateTime?
+  
+  // Unlock Tracking (Admin only)
+  unlockedAt            DateTime?
+  unlockedBy            String?
+  unlockJustification   String?  @db.Text
+  
+  // Historical Flag
+  isHistoricalRecord    Boolean  @default(false)
+  isArchived            Boolean  @default(false)
+  archivedAt            DateTime?
+  
+  // Relationships
+  reports               Report[]
+  
+  // Firm Association
+  firmId                String
+  firm                  Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Audit Trail
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deleted               Boolean  @default(false)
+  deletedAt             DateTime?
+  
+  @@index([firmId])
+  @@index([clientId])
+  @@index([year])
+  @@index([status])
+  @@index([leadPartnerId])
+  @@index([isArchived])
+  @@unique([clientId, year, type, status]) // Enforce one draft per client/year/type
+}
+
+enum EngagementType {
+  AUDIT
+  ADVISORY
+  COMPLIANCE
+  DUE_DILIGENCE
+  RISK_ASSESSMENT
+  TAX
+  FORENSIC
+  VALUATION
+  INTERNAL_AUDIT
+  REGULATORY
+}
+
+enum EngagementStatus {
+  DRAFT
+  IN_REVIEW
+  AWAITING_PARTNER_REVIEW
+  FINAL
+  LOCKED
+}
+
+// ============================================
+// MODULE 6: STRUCTURED REPORT COMPOSITION
+// ============================================
+
+model Report {
+  id                    String   @id @default(cuid())
+  
+  // Core Identity
+  reportNumber          String   @unique // RPT-2024-001
+  title                 String
+  
+  // Engagement Association
+  engagementId          String
+  engagement            Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  
+  // Client (denormalized for quick access)
+  clientId              String
+  client                Client   @relation(fields: [clientId], references: [id])
+  
+  // Status Lifecycle
+  status                ReportStatus @default(DRAFT)
+  
+  draftedAt             DateTime?
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  finalizedAt           DateTime?
+  lockedAt              DateTime?
+  
+  // Executive Summary
+  executiveSummary      String?  @db.Text
+  
+  // Structured Sections
+  sections              ReportSection[]
+  
+  // Team
+  leadConsultantId      String
+  leadConsultant        User     @relation("ReportLead", fields: [leadConsultantId], references: [id])
+  
+  reviewerId            String?
+  reviewer              User?    @relation("ReportReviewer", fields: [reviewerId], references: [id])
+  
+  approverId            String?
+  approver              User?    @relation("ReportApprover", fields: [approverId], references: [id])
+  
+  // Manager Approval
+  managerApprovedAt     DateTime?
+  managerApprovedBy     String?
+  
+  // Partner Sign-Off
+  partnerApprovedAt     DateTime?
+  partnerApprovedBy     String?
+  signedOffAt           DateTime?
+  signedOffBy           String?
+  acknowledgment        String?  @db.Text
+  acknowledgmentHash    String?  // SHA-256
+  
+  // Evidence
+  evidence              Evidence[]
+  
+  // Reviews & Comments
+  comments              Comment[]
+  reviews               Review[]
+  
+  // Version Control
+  version               Int      @default(1)
+  
+  // Firm Association
+  firmId                String
+  firm                  Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Audit Trail
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deleted               Boolean  @default(false)
+  deletedAt             DateTime?
+  
+  @@index([firmId])
+  @@index([engagementId])
+  @@index([clientId])
+  @@index([status])
+  @@index([reportNumber])
+  @@index([deleted])
+}
+
+model ReportSection {
+  id                    String   @id @default(cuid())
+  
+  // Report Association
+  reportId              String
+  report                Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  // Section Type (Strict Structure)
+  sectionType           SectionType
+  title                 String
+  content               String   @db.Text
+  order                 Int
+  
+  // Version Control
+  version               Int      @default(1)
+  versions              SectionVersion[]
+  
+  // Locking (Partner/Manager only)
+  isLocked              Boolean  @default(false)
+  lockedAt              DateTime?
+  lockedBy              String?
+  
+  // Comments
+  comments              Comment[]
+  
+  // Evidence Links
+  evidence              Evidence[]
+  
+  // Audit Trail
+  lastUpdatedBy         String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@index([reportId])
+  @@index([sectionType])
+  @@index([isLocked])
+}
+
+model SectionVersion {
+  id                    String   @id @default(cuid())
+  
+  // Section Association
+  sectionId             String
+  section               ReportSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  
+  // Version Data
+  version               Int
+  content               String   @db.Text
+  contentHash           String   // SHA-256
+  
+  // Audit Trail
+  updatedBy             String
+  updatedAt             DateTime
+  
+  @@index([sectionId])
+  @@unique([sectionId, version])
+}
+
+enum SectionType {
+  SCOPE
+  METHODOLOGY
+  FINDINGS
+  OBSERVATIONS
+  CONCLUSIONS
+  RECOMMENDATIONS
+}
+
+enum ReportStatus {
+  DRAFT
+  IN_REVIEW
+  AWAITING_PARTNER_REVIEW
+  FINAL
+  LOCKED
+}
+
+// ============================================
+// MODULE 7: EVIDENCE & REFERENCE INTELLIGENCE
+// ============================================
+
+model Evidence {
+  id                    String   @id @default(cuid())
+  
+  // Reference (NO FILE STORAGE)
+  referenceNumber       String   @unique // EVD-2024-001
+  fileName              String
+  sourceSystem          SourceSystem
+  referencePath         String   // URI to actual file location
+  checksum              String?  // SHA-256 for integrity verification
+  
+  // Metadata
+  description           String?  @db.Text
+  evidenceType          EvidenceType
+  fileSize              Int?     // In bytes
+  mimeType              String?
+  
+  // Report Association
+  reportId              String
+  report                Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  // Section Linking
+  linkedSectionId       String?
+  linkedSection         ReportSection? @relation(fields: [linkedSectionId], references: [id])
+  
+  // Tracking
+  addedBy               String
+  addedByUser           User     @relation(fields: [addedBy], references: [id])
+  addedAt               DateTime @default(now())
+  
+  // Verification
+  isVerified            Boolean  @default(false)
+  verifiedAt            DateTime?
+  verifiedBy            String?
+  verificationNotes     String?  @db.Text
+  
+  // Firm Association
+  firmId                String
+  firm                  Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Audit Trail
+  createdAt             DateTime @default(now())
+  deleted               Boolean  @default(false)
+  deletedAt             DateTime?
+  
+  @@index([firmId])
+  @@index([reportId])
+  @@index([linkedSectionId])
+  @@index([referenceNumber])
+  @@index([deleted])
+}
+
+enum SourceSystem {
+  SHAREPOINT
+  GOOGLE_DRIVE
+  BOX
+  ONEDRIVE
+  DROPBOX
+  LOCAL
+  OTHER
+}
+
+enum EvidenceType {
+  DOCUMENT
+  SPREADSHEET
+  EMAIL
+  SCREENSHOT
+  INTERVIEW_NOTES
+  SYSTEM_EXTRACT
+  PHOTO
+  VIDEO
+  AUDIO
+  OTHER
+}
+
+// ============================================
+// MODULE 8: REVIEW, COMMENT & SIGN-OFF SYSTEM
+// ============================================
+
+model Comment {
+  id                    String   @id @default(cuid())
+  
+  // Location
+  reportId              String
+  report                Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  sectionId             String?
+  section               ReportSection? @relation(fields: [sectionId], references: [id])
+  
+  // Content
+  content               String   @db.Text
+  
+  // Threading
+  parentCommentId       String?
+  parentComment         Comment? @relation("CommentThread", fields: [parentCommentId], references: [id])
+  replies               Comment[] @relation("CommentThread")
+  
+  // Author
+  authorId              String
+  author                User     @relation(fields: [authorId], references: [id])
+  
+  // Status
+  status                CommentStatus @default(OPEN)
+  resolvedAt            DateTime?
+  resolvedBy            String?
+  resolution            String?  @db.Text
+  
+  // Firm Association
+  firmId                String
+  firm                  Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Audit Trail (Comments CANNOT be deleted)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([reportId])
+  @@index([sectionId])
+  @@index([status])
+  @@index([authorId])
+}
+
+model Review {
+  id                    String   @id @default(cuid())
+  
+  // Report Association
+  reportId              String
+  report                Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  // Reviewer
+  reviewerId            String
+  reviewer              User     @relation(fields: [reviewerId], references: [id])
+  reviewerRole          UserRole
+  
+  // Review Type
+  reviewType            ReviewType
+  
+  // Status
+  status                ReviewStatus @default(PENDING)
+  
+  // Decision
+  decision              ReviewDecision?
+  comments              String?  @db.Text
+  
+  // Partner Sign-Off
+  acknowledgment        String?  @db.Text
+  acknowledgmentHash    String?  // SHA-256
+  signedOffAt           DateTime?
+  
+  // Firm Association
+  firmId                String
+  firm                  Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Audit Trail
+  assignedAt            DateTime @default(now())
+  completedAt           DateTime?
+  
+  @@index([firmId])
+  @@index([reportId])
+  @@index([reviewerId])
+  @@index([status])
+  @@index([reviewType])
+}
+
+enum CommentStatus {
+  OPEN
+  RESOLVED
+}
+
+enum ReviewType {
+  MANAGER_REVIEW
+  PARTNER_REVIEW
+}
+
+enum ReviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ReviewDecision {
+  APPROVED
+  REJECTED
+  NEEDS_REVISION
+}
+
+// ============================================
+// DATABASE CONSTRAINTS & POLICIES
+// ============================================
+
+// Row-Level Security (RLS) for firm isolation
+// Implemented at application level + database triggers
+
+// Prevent audit log modifications
+// CREATE TRIGGER prevent_audit_log_update BEFORE UPDATE ON "AuditLog"
+// CREATE TRIGGER prevent_audit_log_delete BEFORE DELETE ON "AuditLog"
+
+// Prevent comment deletions
+// CREATE TRIGGER prevent_comment_delete BEFORE DELETE ON "Comment"
+
+// Enforce one draft per engagement
+// Handled by unique constraint: @@unique([clientId, year, type, status])
