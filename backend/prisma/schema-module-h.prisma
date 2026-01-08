@@ -1,0 +1,135 @@
+// MODULE H — ACTIVITY AUDIT LOG (IMMUTABLE)
+
+model ActivityLog {
+  id              String   @id @default(cuid())
+  
+  // H1. Action Logging
+  action          AuditAction
+  entity          String   // Report, Evidence, Client, etc.
+  entityId        String
+  
+  // Details
+  description     String?
+  metadata        Json?    // Additional context
+  
+  // User who performed the action
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  
+  // Firm context
+  firmId          String
+  firm            Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // IP and User Agent for security
+  ipAddress       String?
+  userAgent       String?
+  
+  // H2. Viewable Log - Timestamped
+  timestamp       DateTime @default(now())
+  
+  // Immutability - once created, cannot be modified or deleted
+  // No updatedAt field
+  // No delete operations allowed
+  
+  @@index([firmId])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([timestamp])
+  @@index([action])
+}
+
+enum AuditAction {
+  // Report Actions
+  REPORT_CREATED
+  REPORT_UPDATED
+  REPORT_DELETED
+  REPORT_STATUS_CHANGED
+  REPORT_SUBMITTED_FOR_REVIEW
+  REPORT_REVIEWED
+  REPORT_FINALIZED
+  REPORT_LOCKED
+  REPORT_UNLOCKED
+  
+  // Section Actions
+  SECTION_ADDED
+  SECTION_UPDATED
+  SECTION_DELETED
+  
+  // Evidence Actions
+  EVIDENCE_ADDED
+  EVIDENCE_UPDATED
+  EVIDENCE_DELETED
+  EVIDENCE_VERIFIED
+  EVIDENCE_REJECTED
+  EVIDENCE_VERSION_CREATED
+  
+  // Review Actions
+  REVIEW_CREATED
+  REVIEW_SUBMITTED
+  REVIEW_APPROVED
+  REVIEW_REJECTED
+  REVIEW_SIGNED_OFF
+  
+  // Comment Actions
+  COMMENT_ADDED
+  COMMENT_UPDATED
+  COMMENT_DELETED
+  COMMENT_RESOLVED
+  
+  // Client Actions
+  CLIENT_CREATED
+  CLIENT_UPDATED
+  CLIENT_DELETED
+  CLIENT_STATUS_CHANGED
+  
+  // Engagement Actions
+  ENGAGEMENT_CREATED
+  ENGAGEMENT_UPDATED
+  ENGAGEMENT_COMPLETED
+  
+  // User Actions
+  USER_LOGIN
+  USER_LOGOUT
+  USER_CREATED
+  USER_UPDATED
+  USER_DEACTIVATED
+  USER_ROLE_CHANGED
+  
+  // Document Actions
+  DOCUMENT_UPLOADED
+  DOCUMENT_DOWNLOADED
+  DOCUMENT_DELETED
+  DOCUMENT_SHARED
+  
+  // Dossier Actions
+  DOSSIER_GENERATED
+  DOSSIER_DOWNLOADED
+  
+  // System Actions
+  SETTINGS_CHANGED
+  PERMISSION_CHANGED
+  EXPORT_PERFORMED
+  IMPORT_PERFORMED
+}
+
+// Add to User model
+model User {
+  // ... existing fields
+  
+  activityLogs    ActivityLog[]
+}
+
+// Add to Firm model
+model Firm {
+  // ... existing fields
+  
+  activityLogs    ActivityLog[]
+}
+
+// Add to Report model
+model Report {
+  // ... existing fields
+  
+  // Audit trail
+  auditLogs       ActivityLog[] @relation("ReportAuditLogs")
+}
