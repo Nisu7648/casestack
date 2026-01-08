@@ -1,0 +1,279 @@
+// CaseStack Enterprise - Database Schema
+// Big-4 Consulting Workflow Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// FOUNDATION
+// ============================================
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  firstName   String
+  lastName    String
+  role        UserRole @default(CONSULTANT)
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  isActive    Boolean  @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leadClients         Client[]      @relation("LeadPartner")
+  engagementsLead     Engagement[]  @relation("LeadPartner")
+  engagementsManager  Engagement[]  @relation("EngagementManagers")
+  comments            Comment[]
+  auditLogs           AuditLog[]
+  evidenceAdded       Evidence[]
+
+  @@index([firmId])
+  @@index([email])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  PARTNER
+  MANAGER
+  CONSULTANT
+}
+
+model Firm {
+  id             String   @id @default(uuid())
+  name           String
+  industry       String?
+  retentionYears Int      @default(7)
+  lockAfterDays  Int      @default(30)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  users       User[]
+  clients     Client[]
+  engagements Engagement[]
+  settings    FirmSettings?
+
+  @@map("firms")
+}
+
+model FirmSettings {
+  id                     String   @id @default(uuid())
+  firmId                 String   @unique
+  firm                   Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  autoLockReports        Boolean  @default(true)
+  requirePartnerApproval Boolean  @default(true)
+  enableAuditExport      Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@map("firm_settings")
+}
+
+// ============================================
+// CLIENT INTELLIGENCE
+// ============================================
+
+model Client {
+  id            String   @id @default(uuid())
+  name          String
+  industry      String
+  leadPartnerId String
+  leadPartner   User     @relation("LeadPartner", fields: [leadPartnerId], references: [id])
+  firmId        String
+  firm          Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  engagements Engagement[]
+
+  @@index([firmId])
+  @@index([leadPartnerId])
+  @@map("clients")
+}
+
+// ============================================
+// ENGAGEMENT & REPORT CORE
+// ============================================
+
+model Engagement {
+  id            String           @id @default(uuid())
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  year          Int
+  type          EngagementType
+  status        EngagementStatus @default(DRAFT)
+  leadPartnerId String
+  leadPartner   User             @relation("LeadPartner", fields: [leadPartnerId], references: [id])
+  managers      User[]           @relation("EngagementManagers")
+  firmId        String
+  firm          Firm             @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  finalizedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  report   Report?
+  evidence Evidence[]
+
+  @@index([clientId])
+  @@index([firmId])
+  @@index([leadPartnerId])
+  @@map("engagements")
+}
+
+enum EngagementType {
+  AUDIT
+  CONSULTING
+  TAX
+  ADVISORY
+  DUE_DILIGENCE
+  RISK_ASSESSMENT
+}
+
+enum EngagementStatus {
+  DRAFT
+  IN_PROGRESS
+  IN_REVIEW
+  APPROVED
+  FINALIZED
+}
+
+model Report {
+  id           String       @id @default(uuid())
+  engagementId String       @unique
+  engagement   Engagement   @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  status       ReportStatus @default(DRAFT)
+  isLocked     Boolean      @default(false)
+  lockedAt     DateTime?
+  approvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  sections ReportSection[]
+  comments Comment[]
+
+  @@index([engagementId])
+  @@map("reports")
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  FINALIZED
+}
+
+model ReportSection {
+  id        String      @id @default(uuid())
+  reportId  String
+  report    Report      @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  type      SectionType
+  content   String      @db.Text
+  order     Int
+  isLocked  Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  comments Comment[]
+
+  @@unique([reportId, type])
+  @@index([reportId])
+  @@map("report_sections")
+}
+
+enum SectionType {
+  SCOPE
+  METHODOLOGY
+  FINDINGS
+  OBSERVATIONS
+  CONCLUSIONS
+  RECOMMENDATIONS
+}
+
+model Comment {
+  id         String         @id @default(uuid())
+  reportId   String
+  report     Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  sectionId  String?
+  section    ReportSection? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User           @relation(fields: [userId], references: [id])
+  content    String         @db.Text
+  isResolved Boolean        @default(false)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([reportId])
+  @@index([sectionId])
+  @@index([userId])
+  @@map("comments")
+}
+
+// ============================================
+// EVIDENCE & TRACEABILITY
+// ============================================
+
+model Evidence {
+  id            String       @id @default(uuid())
+  engagementId  String
+  engagement    Engagement   @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  fileName      String
+  sourceSystem  String
+  sourceUrl     String?
+  addedById     String
+  addedBy       User         @relation(fields: [addedById], references: [id])
+  linkedSection SectionType?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([engagementId])
+  @@map("evidence")
+}
+
+// ============================================
+// AUDIT & COMPLIANCE
+// ============================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  details    String?  @db.Text
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================
+// DOSSIER OUTPUT
+// ============================================
+
+model Dossier {
+  id          String   @id @default(uuid())
+  title       String
+  reportIds   String[]
+  generatedBy String
+  pdfUrl      String?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([generatedBy])
+  @@index([expiresAt])
+  @@map("dossiers")
+}
