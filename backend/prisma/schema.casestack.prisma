@@ -27,16 +27,15 @@ model Firm {
   seatsLicensed    Int      @default(0)
   seatsUsed        Int      @default(0)
   pricePerSeat     Decimal  @db.Decimal(10, 2)
-  billingCurrency  String   @default("INR") // INR, EUR, CHF
+  billingCurrency  String   @default("INR") // INR, EUR, CHF, USD
   
-  // Settings
-  requirePartnerApproval Boolean @default(true)
-  retentionYears         Int     @default(10)
-  allowDownload          Boolean @default(true)
-  
-  users     User[]
-  cases     Case[]
-  settings  FirmSettings?
+  users         User[]
+  clients       Client[]
+  cases         Case[]
+  settings      FirmSettings?
+  subscriptions Subscription[]
+  auditLogs     AuditLog[]
+  memoryIndex   FirmMemoryIndex[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -67,7 +66,7 @@ model FirmSettings {
 enum UserRole {
   ADMIN      // Firm admin
   PARTNER    // Can finalize cases
-  MANAGER    // Can review cases
+  MANAGER    // Can review cases (Reviewer)
   CONSULTANT // Can prepare cases
 }
 
@@ -94,12 +93,45 @@ model User {
   // Logs
   auditLogs      AuditLog[]
   downloadLogs   DownloadLog[]
+  approvalChains ApprovalChain[]
+  uploadedFiles  CaseFile[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
   @@index([email])
   @@index([firmId, role])
+}
+
+// ============================================
+// BILLING & LICENSE MODULE
+// ============================================
+
+enum SubscriptionStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+model Subscription {
+  id String @id @default(cuid())
+  
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  pricePerUser   Decimal            @db.Decimal(10, 2)
+  currency       String             // INR, EUR, CHF, USD
+  billingCycle   String             @default("MONTHLY") // MONTHLY, ANNUAL
+  activeUsers    Int                @default(0)
+  status         SubscriptionStatus @default(ACTIVE)
+  
+  startDate DateTime @default(now())
+  endDate   DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([firmId, status])
 }
 
 // ============================================
@@ -123,7 +155,7 @@ model Client {
 }
 
 // ============================================
-// CASE FINALIZATION SYSTEM (CORE)
+// CASE MANAGEMENT MODULE (CORE)
 // ============================================
 
 enum CaseStatus {
@@ -188,8 +220,10 @@ model Case {
   tags         String[] // For search
   
   // Logs
-  auditLogs    AuditLog[]
-  downloadLogs DownloadLog[]
+  auditLogs      AuditLog[]
+  downloadLogs   DownloadLog[]
+  approvalChains ApprovalChain[]
+  memoryIndex    FirmMemoryIndex[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -202,7 +236,7 @@ model Case {
 }
 
 // ============================================
-// FILE BUNDLE & ARCHIVAL ENGINE
+// FILE BUNDLE MODULE
 // ============================================
 
 model CaseBundle {
@@ -263,7 +297,7 @@ model CaseFile {
 }
 
 // ============================================
-// RESPONSIBILITY & DEFENSIBILITY LAYER
+// FINALIZATION & APPROVAL MODULE
 // ============================================
 
 enum ApprovalAction {
@@ -294,7 +328,7 @@ model ApprovalChain {
 }
 
 // ============================================
-// FIRM MEMORY & SEARCH
+// FIRM MEMORY & SEARCH MODULE
 // ============================================
 
 model FirmMemoryIndex {
@@ -328,10 +362,17 @@ model FirmMemoryIndex {
 }
 
 // ============================================
-// IMMUTABLE AUDIT LOG
+// AUDIT LOG & TRACEABILITY MODULE
 // ============================================
 
 enum AuditAction {
+  FIRM_CREATED
+  USER_CREATED
+  USER_UPDATED
+  USER_LOGIN
+  PASSWORD_CHANGED
+  CLIENT_CREATED
+  CLIENT_UPDATED
   CASE_CREATED
   CASE_UPDATED
   CASE_SUBMITTED
@@ -339,12 +380,14 @@ enum AuditAction {
   CASE_APPROVED
   CASE_FINALIZED
   CASE_LOCKED
+  BUNDLE_CREATED
   FILE_UPLOADED
   FILE_DOWNLOADED
-  BUNDLE_CREATED
-  USER_LOGIN
-  USER_CREATED
-  SETTINGS_CHANGED
+  BUNDLE_DOWNLOADED
+  CASE_EXPORTED
+  SETTINGS_UPDATED
+  FIRM_UPDATED
+  LICENSE_UPDATED
 }
 
 model AuditLog {
@@ -357,7 +400,7 @@ model AuditLog {
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
   
   action       AuditAction
-  entityType   String      // "CASE", "FILE", "USER"
+  entityType   String      // "CASE", "FILE", "USER", "FIRM"
   entityId     String
   
   // Details
@@ -402,13 +445,3 @@ model DownloadLog {
   @@index([userId])
   @@index([createdAt])
 }
-
-// ============================================
-// INDEXES FOR PERFORMANCE
-// ============================================
-
-// Additional indexes for common queries
-@@index([Case.firmId, Case.status, Case.fiscalYear])
-@@index([Case.finalizedAt])
-@@index([AuditLog.firmId, AuditLog.action, AuditLog.createdAt])
-@@index([FirmMemoryIndex.firmId, FirmMemoryIndex.fiscalYear])
