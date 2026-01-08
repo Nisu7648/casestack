@@ -1,5 +1,5 @@
-// Prisma Schema for CaseStack
-// Module 0: Foundation
+// Prisma Schema - Module 1: Case Management
+// Extends Module 0 with Case Canvas functionality
 
 generator client {
   provider = "prisma-client-js"
@@ -10,24 +10,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Firm Entity
+// ============================================
+// MODULE 0: FOUNDATION (Existing)
+// ============================================
+
 model Firm {
   id        String   @id @default(uuid())
   name      String
-  country   String   // For pricing logic later
-  billingEnabled Boolean @default(false) // Firm-level billing flag
+  country   String
+  billingEnabled Boolean @default(false)
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  // Relations
   users     User[]
   activityLogs ActivityLog[]
+  clients   Client[]
+  cases     Case[]
   
   @@map("firms")
 }
 
-// User Entity
 enum UserRole {
   ADMIN
   PARTNER
@@ -39,13 +42,12 @@ enum UserRole {
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
-  password  String   // Hashed with bcrypt
+  password  String
   firstName String
   lastName  String
   role      UserRole @default(CONSULTANT)
   isActive  Boolean  @default(true)
   
-  // Foreign Keys
   firmId    String
   firm      Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
   
@@ -53,15 +55,21 @@ model User {
   updatedAt DateTime @updatedAt
   lastLoginAt DateTime?
   
-  // Relations
   activityLogs ActivityLog[]
+  casesLead    Case[]        @relation("CaseLead")
+  caseMembers  CaseMember[]
+  tasks        Task[]
+  timeEntries  TimeEntry[]
+  caseActivities CaseActivity[]
+  activityMentions CaseActivity[] @relation("ActivityMentions")
+  comments     Comment[]
+  documentsUploaded Document[]
   
   @@index([firmId])
   @@index([email])
   @@map("users")
 }
 
-// Immutable Activity Log
 enum ActivityAction {
   CREATE
   UPDATE
@@ -76,23 +84,19 @@ enum ActivityAction {
 model ActivityLog {
   id        String   @id @default(uuid())
   
-  // Who
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userEmail String   // Denormalized for immutability
-  userName  String   // Denormalized for immutability
-  userRole  UserRole // Denormalized for immutability
+  userEmail String
+  userName  String
+  userRole  UserRole
   
-  // What
   action    ActivityAction
-  entity    String   // e.g., "Report", "Client", "Invoice"
-  entityId  String?  // ID of the affected entity
-  details   String?  // JSON string with additional context
+  entity    String
+  entityId  String?
+  details   String?
   
-  // When
   timestamp DateTime @default(now())
   
-  // Context
   firmId    String
   firm      Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
   ipAddress String?
@@ -103,4 +107,379 @@ model ActivityLog {
   @@index([timestamp])
   @@index([entity, entityId])
   @@map("activity_logs")
+}
+
+// ============================================
+// MODULE 1: CASE CANVAS
+// ============================================
+
+// Client Entity
+model Client {
+  id          String   @id @default(uuid())
+  name        String
+  industry    String?
+  country     String?
+  website     String?
+  
+  // Primary Contact
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+  
+  // Address
+  address     String?
+  city        String?
+  state       String?
+  postalCode  String?
+  
+  // Metadata
+  notes       String?
+  
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  cases       Case[]
+  contacts    Contact[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([name])
+  @@map("clients")
+}
+
+// Additional contacts for a client
+model Contact {
+  id          String   @id @default(uuid())
+  
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  position    String?
+  isPrimary   Boolean  @default(false)
+  
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([clientId])
+  @@map("contacts")
+}
+
+// Case Entity - The Core of Case Canvas
+enum CaseType {
+  STRATEGY
+  OPERATIONS
+  TECHNOLOGY
+  FINANCIAL
+  HR
+  MARKETING
+  SALES
+  LEGAL
+  OTHER
+}
+
+enum CaseStatus {
+  PLANNING
+  IN_PROGRESS
+  ON_HOLD
+  REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum CasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Case {
+  id          String   @id @default(uuid())
+  
+  // Basic Info
+  title       String
+  description String?
+  caseNumber  String   @unique // Auto-generated: CASE-2024-001
+  caseType    CaseType
+  status      CaseStatus @default(PLANNING)
+  priority    CasePriority @default(MEDIUM)
+  
+  // Client
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  
+  // Timeline
+  startDate   DateTime
+  endDate     DateTime
+  
+  // Financials
+  budgetTotal    Decimal  @default(0)
+  budgetSpent    Decimal  @default(0)
+  currency       String   @default("USD")
+  hourlyRate     Decimal? // Optional hourly rate
+  
+  // Team
+  leadId      String
+  lead        User     @relation("CaseLead", fields: [leadId], references: [id], onDelete: Restrict)
+  members     CaseMember[]
+  
+  // Progress
+  progressPercentage Int @default(0) // 0-100
+  
+  // Firm
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Relations
+  tasks       Task[]
+  timeEntries TimeEntry[]
+  documents   Document[]
+  activities  CaseActivity[]
+  
+  // Metadata
+  tags        String[] // Array of tags
+  isArchived  Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([clientId])
+  @@index([status])
+  @@index([leadId])
+  @@index([caseNumber])
+  @@map("cases")
+}
+
+// Case Team Members
+model CaseMember {
+  id          String   @id @default(uuid())
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  role        String?  // e.g., "Analyst", "Senior Consultant"
+  
+  joinedAt    DateTime @default(now())
+  
+  @@unique([caseId, userId])
+  @@index([caseId])
+  @@index([userId])
+  @@map("case_members")
+}
+
+// Task Entity
+enum TaskType {
+  TASK
+  DELIVERABLE
+  MILESTONE
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  REVIEW
+  BLOCKED
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  
+  title       String
+  description String?
+  type        TaskType @default(TASK)
+  status      TaskStatus @default(NOT_STARTED)
+  priority    TaskPriority @default(MEDIUM)
+  
+  // Assignment
+  assigneeId  String?
+  assignee    User?    @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  
+  // Timeline
+  dueDate     DateTime?
+  startDate   DateTime?
+  completedAt DateTime?
+  
+  // Time Estimation
+  estimatedHours Decimal?
+  actualHours    Decimal  @default(0)
+  
+  // Case
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Deliverable specific
+  deliverableType String? // "Report", "Presentation", "Model", etc.
+  version         Int     @default(1)
+  clientApproved  Boolean @default(false)
+  
+  // Relations
+  timeEntries TimeEntry[]
+  comments    Comment[]
+  
+  // Order for display
+  order       Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+// Time Entry
+model TimeEntry {
+  id          String   @id @default(uuid())
+  
+  // Time
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Decimal  // in hours
+  description String?
+  
+  // Billable
+  billable    Boolean  @default(true)
+  hourlyRate  Decimal?
+  amount      Decimal? // Calculated: duration * hourlyRate
+  
+  // Relations
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  taskId      String?
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([caseId])
+  @@index([taskId])
+  @@index([startTime])
+  @@map("time_entries")
+}
+
+// Document Management
+enum DocumentType {
+  PROPOSAL
+  CONTRACT
+  REPORT
+  PRESENTATION
+  SPREADSHEET
+  IMAGE
+  OTHER
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  
+  name        String
+  description String?
+  type        DocumentType @default(OTHER)
+  
+  // File info
+  fileName    String
+  fileSize    Int      // in bytes
+  mimeType    String
+  fileUrl     String   // S3/storage URL
+  
+  // Version control
+  version     Int      @default(1)
+  
+  // Case
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Uploaded by
+  uploadedById String
+  uploadedBy   User    @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([uploadedById])
+  @@map("documents")
+}
+
+// Case Activity Feed
+enum CaseActivityAction {
+  CREATED
+  UPDATED
+  COMPLETED
+  COMMENTED
+  UPLOADED
+  DELETED
+  MENTIONED
+  STATUS_CHANGED
+  MEMBER_ADDED
+  MEMBER_REMOVED
+}
+
+model CaseActivity {
+  id          String   @id @default(uuid())
+  
+  action      CaseActivityAction
+  entity      String   // 'case', 'task', 'document', etc.
+  entityId    String?
+  description String   // Human-readable description
+  metadata    String?  // JSON for additional data
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  mentions    User[]   @relation("ActivityMentions")
+  
+  timestamp   DateTime @default(now())
+  
+  @@index([caseId])
+  @@index([timestamp])
+  @@index([userId])
+  @@map("case_activities")
+}
+
+// Comments on tasks
+model Comment {
+  id          String   @id @default(uuid())
+  
+  content     String
+  
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([taskId])
+  @@index([userId])
+  @@map("comments")
 }
