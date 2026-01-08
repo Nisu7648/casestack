@@ -12,6 +12,8 @@ const firmRoutes = require('./routes/firm.routes');
 const activityLogRoutes = require('./routes/activityLog.routes');
 const clientRoutes = require('./routes/client.routes');
 const caseRoutes = require('./routes/case.routes');
+const taskRoutes = require('./routes/task.routes');
+const timeRoutes = require('./routes/time.routes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorHandler');
@@ -51,7 +53,7 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     service: 'CaseStack API',
     version: '1.0.0',
-    modules: ['Foundation', 'Case Canvas']
+    modules: ['Foundation', 'Case Canvas', 'Task Management', 'Time Tracking']
   });
 });
 
@@ -62,6 +64,8 @@ app.use('/api/firms', firmRoutes);
 app.use('/api/activity-logs', activityLogRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/cases', caseRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/time', timeRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -80,6 +84,8 @@ app.listen(PORT, () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✅ Module 0: Foundation`);
   console.log(`✅ Module 1: Case Canvas`);
+  console.log(`✅ Task Management`);
+  console.log(`✅ Time Tracking`);
 });
 
 module.exports = app;
