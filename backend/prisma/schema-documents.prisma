@@ -1,0 +1,103 @@
+model Document {
+  id              String   @id @default(cuid())
+  name            String
+  fileName        String
+  filePath        String
+  fileSize        BigInt
+  mimeType        String
+  category        DocumentCategory @default(OTHER)
+  description     String?
+  tags            String[]
+  version         Int      @default(1)
+  downloadCount   Int      @default(0)
+  lastAccessedAt  DateTime?
+  
+  caseId          String
+  case            Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  uploadedById    String
+  uploadedBy      User     @relation(fields: [uploadedById], references: [id])
+  
+  versions        DocumentVersion[]
+  shares          DocumentShare[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([caseId])
+  @@index([uploadedById])
+  @@index([category])
+}
+
+model DocumentVersion {
+  id              String   @id @default(cuid())
+  version         Int
+  fileName        String
+  filePath        String
+  fileSize        BigInt
+  
+  documentId      String
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  
+  uploadedById    String
+  uploadedBy      User     @relation(fields: [uploadedById], references: [id])
+  
+  createdAt       DateTime @default(now())
+
+  @@index([documentId])
+}
+
+model DocumentShare {
+  id              String   @id @default(cuid())
+  
+  documentId      String
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  
+  sharedById      String
+  sharedBy        User     @relation("SharedBy", fields: [sharedById], references: [id])
+  
+  sharedWithId    String
+  sharedWith      User     @relation("SharedWith", fields: [sharedWithId], references: [id])
+  
+  expiresAt       DateTime?
+  canDownload     Boolean  @default(true)
+  canEdit         Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+
+  @@index([documentId])
+  @@index([sharedWithId])
+}
+
+enum DocumentCategory {
+  CONTRACT
+  PROPOSAL
+  REPORT
+  PRESENTATION
+  SPREADSHEET
+  IMAGE
+  INVOICE
+  LEGAL
+  RESEARCH
+  MEETING_NOTES
+  CLIENT_BRIEF
+  DELIVERABLE
+  OTHER
+}
+
+// Add to User model
+model User {
+  // ... existing fields
+  
+  uploadedDocuments   Document[]
+  documentVersions    DocumentVersion[]
+  sharedDocuments     DocumentShare[] @relation("SharedBy")
+  receivedShares      DocumentShare[] @relation("SharedWith")
+}
+
+// Add to Case model
+model Case {
+  // ... existing fields
+  
+  documents       Document[]
+}
