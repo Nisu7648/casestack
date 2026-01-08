@@ -1,0 +1,414 @@
+// ============================================
+// CASESTACK - FINALIZATION & DEFENSIBILITY SYSTEM
+// Database Schema (Locked Direction)
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// FIRM & USER MANAGEMENT
+// ============================================
+
+model Firm {
+  id        String   @id @default(cuid())
+  name      String
+  industry  String?
+  country   String   // India, Europe, Switzerland (affects pricing)
+  
+  // Licensing
+  licenseType      String   @default("ENTERPRISE") // ENTERPRISE only
+  seatsLicensed    Int      @default(0)
+  seatsUsed        Int      @default(0)
+  pricePerSeat     Decimal  @db.Decimal(10, 2)
+  billingCurrency  String   @default("INR") // INR, EUR, CHF
+  
+  // Settings
+  requirePartnerApproval Boolean @default(true)
+  retentionYears         Int     @default(10)
+  allowDownload          Boolean @default(true)
+  
+  users     User[]
+  cases     Case[]
+  settings  FirmSettings?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([name])
+}
+
+model FirmSettings {
+  id     String @id @default(cuid())
+  firmId String @unique
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Approval Rules
+  requirePartnerForFinalization Boolean @default(true)
+  requireTwoApprovers           Boolean @default(false)
+  
+  // Security
+  enableDownloadTracking Boolean @default(true)
+  enableAuditExport      Boolean @default(true)
+  
+  // Archival
+  autoArchiveAfterYears Int @default(7)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum UserRole {
+  ADMIN      // Firm admin
+  PARTNER    // Can finalize cases
+  MANAGER    // Can review cases
+  CONSULTANT // Can prepare cases
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  
+  firstName String
+  lastName  String
+  role      UserRole
+  
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  
+  // Cases
+  preparedCases  Case[] @relation("PreparedBy")
+  reviewedCases  Case[] @relation("ReviewedBy")
+  approvedCases  Case[] @relation("ApprovedBy")
+  
+  // Logs
+  auditLogs      AuditLog[]
+  downloadLogs   DownloadLog[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([email])
+  @@index([firmId, role])
+}
+
+// ============================================
+// CLIENT MANAGEMENT (MINIMAL)
+// ============================================
+
+model Client {
+  id       String  @id @default(cuid())
+  name     String
+  industry String?
+  
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  cases Case[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([firmId, name])
+}
+
+// ============================================
+// CASE FINALIZATION SYSTEM (CORE)
+// ============================================
+
+enum CaseStatus {
+  DRAFT          // Being prepared
+  UNDER_REVIEW   // Submitted for review
+  FINALIZED      // LOCKED - Cannot be changed
+}
+
+enum CaseType {
+  AUDIT
+  CONSULTING
+  TAX
+  ADVISORY
+  DUE_DILIGENCE
+  RISK_ASSESSMENT
+}
+
+model Case {
+  id          String     @id @default(cuid())
+  caseNumber  String     @unique // Auto-generated: CASE-2024-001
+  caseName    String
+  caseType    CaseType
+  
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Period
+  periodStart DateTime
+  periodEnd   DateTime
+  fiscalYear  Int
+  
+  // Status
+  status CaseStatus @default(DRAFT)
+  
+  // Responsibility Chain
+  preparedById String
+  preparedBy   User   @relation("PreparedBy", fields: [preparedById], references: [id], onDelete: Restrict)
+  
+  reviewedById String?
+  reviewedBy   User?   @relation("ReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict)
+  
+  approvedById String?
+  approvedBy   User?   @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  
+  // Timestamps
+  submittedForReviewAt DateTime?
+  finalizedAt          DateTime?
+  
+  // Locking
+  isLocked     Boolean @default(false)
+  lockedAt     DateTime?
+  lockedReason String? // "FINALIZED", "REGULATORY", "LEGAL"
+  
+  // Files
+  bundles      CaseBundle[]
+  
+  // Metadata
+  description  String?
+  tags         String[] // For search
+  
+  // Logs
+  auditLogs    AuditLog[]
+  downloadLogs DownloadLog[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([firmId, status])
+  @@index([clientId])
+  @@index([caseNumber])
+  @@index([fiscalYear])
+  @@index([finalizedAt])
+}
+
+// ============================================
+// FILE BUNDLE & ARCHIVAL ENGINE
+// ============================================
+
+model CaseBundle {
+  id          String @id @default(cuid())
+  bundleName  String // "Final Report Package", "Supporting Documents"
+  version     Int    @default(1)
+  
+  caseId String
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Files
+  files CaseFile[]
+  
+  // Bundle Metadata
+  isFinalized Boolean @default(false)
+  finalizedAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([caseId])
+}
+
+enum FileType {
+  PDF
+  XLSX
+  DOCX
+  ZIP
+  OTHER
+}
+
+model CaseFile {
+  id       String   @id @default(cuid())
+  fileName String
+  fileType FileType
+  fileSize Int      // bytes
+  fileHash String   // SHA-256 for integrity
+  
+  bundleId String
+  bundle   CaseBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  
+  // Storage
+  storageUrl  String // S3, Azure Blob, or local path
+  storagePath String
+  
+  // Metadata
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  
+  // Immutability
+  isLocked Boolean @default(false)
+  lockedAt DateTime?
+  
+  createdAt DateTime @default(now())
+  
+  @@index([bundleId])
+  @@index([fileHash])
+}
+
+// ============================================
+// RESPONSIBILITY & DEFENSIBILITY LAYER
+// ============================================
+
+enum ApprovalAction {
+  SUBMITTED_FOR_REVIEW
+  REVIEWED
+  APPROVED
+  REJECTED
+  FINALIZED
+}
+
+model ApprovalChain {
+  id String @id @default(cuid())
+  
+  caseId String
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  action     ApprovalAction
+  actionById String
+  actionBy   User           @relation(fields: [actionById], references: [id], onDelete: Restrict)
+  
+  comments String?
+  
+  // Immutable
+  createdAt DateTime @default(now())
+  
+  @@index([caseId])
+  @@index([actionById])
+}
+
+// ============================================
+// FIRM MEMORY & SEARCH
+// ============================================
+
+model FirmMemoryIndex {
+  id String @id @default(cuid())
+  
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  // Searchable Fields
+  caseId       String
+  case         Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  clientName   String
+  caseName     String
+  caseType     String
+  fiscalYear   Int
+  partnerName  String
+  
+  // Full-text search
+  searchVector String @db.Text // For PostgreSQL full-text search
+  
+  // Metadata
+  finalizedAt DateTime
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([firmId, fiscalYear])
+  @@index([clientName])
+  @@index([caseName])
+}
+
+// ============================================
+// IMMUTABLE AUDIT LOG
+// ============================================
+
+enum AuditAction {
+  CASE_CREATED
+  CASE_UPDATED
+  CASE_SUBMITTED
+  CASE_REVIEWED
+  CASE_APPROVED
+  CASE_FINALIZED
+  CASE_LOCKED
+  FILE_UPLOADED
+  FILE_DOWNLOADED
+  BUNDLE_CREATED
+  USER_LOGIN
+  USER_CREATED
+  SETTINGS_CHANGED
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+  
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  
+  action       AuditAction
+  entityType   String      // "CASE", "FILE", "USER"
+  entityId     String
+  
+  // Details
+  details      Json?       // Structured data
+  ipAddress    String?
+  userAgent    String?
+  
+  // Immutable
+  createdAt DateTime @default(now())
+  
+  @@index([firmId, createdAt])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([action])
+}
+
+// ============================================
+// DOWNLOAD TRACKING (DEFENSIBILITY)
+// ============================================
+
+model DownloadLog {
+  id String @id @default(cuid())
+  
+  caseId String
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  
+  // What was downloaded
+  downloadType String // "FULL_BUNDLE", "SINGLE_FILE", "AUDIT_EXPORT"
+  fileIds      String[] // Array of file IDs
+  
+  // Tracking
+  ipAddress String?
+  userAgent String?
+  
+  // Immutable
+  createdAt DateTime @default(now())
+  
+  @@index([caseId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============================================
+// INDEXES FOR PERFORMANCE
+// ============================================
+
+// Additional indexes for common queries
+@@index([Case.firmId, Case.status, Case.fiscalYear])
+@@index([Case.finalizedAt])
+@@index([AuditLog.firmId, AuditLog.action, AuditLog.createdAt])
+@@index([FirmMemoryIndex.firmId, FirmMemoryIndex.fiscalYear])
