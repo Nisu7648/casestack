@@ -14,6 +14,10 @@ const clientRoutes = require('./routes/client.routes');
 const caseRoutes = require('./routes/case.routes');
 const taskRoutes = require('./routes/task.routes');
 const timeRoutes = require('./routes/time.routes');
+const workflowRoutes = require('./routes/workflow.routes');
+const milestoneRoutes = require('./routes/milestone.routes');
+const riskRoutes = require('./routes/risk.routes');
+const analyticsRoutes = require('./routes/analytics.routes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorHandler');
@@ -52,8 +56,17 @@ app.get('/health', (req, res) => {
     status: 'ok', 
     timestamp: new Date().toISOString(),
     service: 'CaseStack API',
-    version: '1.0.0',
-    modules: ['Foundation', 'Case Canvas', 'Task Management', 'Time Tracking']
+    version: '2.0.0',
+    modules: [
+      'Foundation',
+      'Case Canvas',
+      'Task Management',
+      'Time Tracking',
+      'Workflow Templates',
+      'Milestones',
+      'Risk Management',
+      'Analytics & Reporting'
+    ]
   });
 });
 
@@ -66,6 +79,10 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/cases', caseRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/time', timeRoutes);
+app.use('/api/workflows', workflowRoutes);
+app.use('/api/milestones', milestoneRoutes);
+app.use('/api/risks', riskRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -82,10 +99,16 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`🚀 CaseStack API running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✅ Module 0: Foundation`);
-  console.log(`✅ Module 1: Case Canvas`);
-  console.log(`✅ Task Management`);
-  console.log(`✅ Time Tracking`);
+  console.log(`\n✅ Active Modules:`);
+  console.log(`   • Foundation (Auth, Users, Firms)`);
+  console.log(`   • Case Canvas (Cases, Clients, Documents)`);
+  console.log(`   • Task Management (Tasks, Subtasks, Comments)`);
+  console.log(`   • Time Tracking (Timer, Entries, Billing)`);
+  console.log(`   • Workflow Templates (Automation)`);
+  console.log(`   • Milestones (Project Tracking)`);
+  console.log(`   • Risk Management (Risk Register)`);
+  console.log(`   • Analytics & Reporting (Insights, Export)`);
+  console.log(`\n📊 Total API Endpoints: 60+`);
 });
 
 module.exports = app;
