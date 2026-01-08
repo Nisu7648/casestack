@@ -1,5 +1,5 @@
-// Prisma Schema - Module 1: Case Management
-// Extends Module 0 with Case Canvas functionality
+// Prisma Schema - Complete CaseStack Platform
+// Modules: Foundation, Case Canvas, Workflows, Analytics
 
 generator client {
   provider = "prisma-client-js"
@@ -11,7 +11,7 @@ datasource db {
 }
 
 // ============================================
-// MODULE 0: FOUNDATION (Existing)
+// MODULE 0: FOUNDATION
 // ============================================
 
 model Firm {
@@ -27,6 +27,7 @@ model Firm {
   activityLogs ActivityLog[]
   clients   Client[]
   cases     Case[]
+  workflowTemplates WorkflowTemplate[]
   
   @@map("firms")
 }
@@ -64,6 +65,8 @@ model User {
   activityMentions CaseActivity[] @relation("ActivityMentions")
   comments     Comment[]
   documentsUploaded Document[]
+  milestones   Milestone[]
+  risks        Risk[]
   
   @@index([firmId])
   @@index([email])
@@ -113,7 +116,6 @@ model ActivityLog {
 // MODULE 1: CASE CANVAS
 // ============================================
 
-// Client Entity
 model Client {
   id          String   @id @default(uuid())
   name        String
@@ -121,18 +123,15 @@ model Client {
   country     String?
   website     String?
   
-  // Primary Contact
   contactName  String?
   contactEmail String?
   contactPhone String?
   
-  // Address
   address     String?
   city        String?
   state       String?
   postalCode  String?
   
-  // Metadata
   notes       String?
   
   firmId      String
@@ -149,7 +148,6 @@ model Client {
   @@map("clients")
 }
 
-// Additional contacts for a client
 model Contact {
   id          String   @id @default(uuid())
   
@@ -170,7 +168,6 @@ model Contact {
   @@map("contacts")
 }
 
-// Case Entity - The Core of Case Canvas
 enum CaseType {
   STRATEGY
   OPERATIONS
@@ -202,48 +199,43 @@ enum CasePriority {
 model Case {
   id          String   @id @default(uuid())
   
-  // Basic Info
   title       String
   description String?
-  caseNumber  String   @unique // Auto-generated: CASE-2024-001
+  caseNumber  String   @unique
   caseType    CaseType
   status      CaseStatus @default(PLANNING)
   priority    CasePriority @default(MEDIUM)
   
-  // Client
   clientId    String
   client      Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
   
-  // Timeline
   startDate   DateTime
   endDate     DateTime
   
-  // Financials
   budgetTotal    Decimal  @default(0)
   budgetSpent    Decimal  @default(0)
   currency       String   @default("USD")
-  hourlyRate     Decimal? // Optional hourly rate
+  hourlyRate     Decimal?
   
-  // Team
   leadId      String
   lead        User     @relation("CaseLead", fields: [leadId], references: [id], onDelete: Restrict)
   members     CaseMember[]
   
-  // Progress
-  progressPercentage Int @default(0) // 0-100
+  progressPercentage Int @default(0)
   
-  // Firm
   firmId      String
   firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
   
-  // Relations
   tasks       Task[]
   timeEntries TimeEntry[]
   documents   Document[]
   activities  CaseActivity[]
+  milestones  Milestone[]
+  risks       Risk[]
+  dependencies Dependency[]
+  customFields CustomFieldValue[]
   
-  // Metadata
-  tags        String[] // Array of tags
+  tags        String[]
   isArchived  Boolean  @default(false)
   
   createdAt   DateTime @default(now())
@@ -257,7 +249,6 @@ model Case {
   @@map("cases")
 }
 
-// Case Team Members
 model CaseMember {
   id          String   @id @default(uuid())
   
@@ -267,7 +258,7 @@ model CaseMember {
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  role        String?  // e.g., "Analyst", "Senior Consultant"
+  role        String?
   
   joinedAt    DateTime @default(now())
   
@@ -277,7 +268,6 @@ model CaseMember {
   @@map("case_members")
 }
 
-// Task Entity
 enum TaskType {
   TASK
   DELIVERABLE
@@ -308,33 +298,31 @@ model Task {
   status      TaskStatus @default(NOT_STARTED)
   priority    TaskPriority @default(MEDIUM)
   
-  // Assignment
   assigneeId  String?
   assignee    User?    @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
   
-  // Timeline
   dueDate     DateTime?
   startDate   DateTime?
   completedAt DateTime?
   
-  // Time Estimation
   estimatedHours Decimal?
   actualHours    Decimal  @default(0)
   
-  // Case
   caseId      String
   case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
   
-  // Deliverable specific
-  deliverableType String? // "Report", "Presentation", "Model", etc.
+  deliverableType String?
   version         Int     @default(1)
   clientApproved  Boolean @default(false)
   
-  // Relations
   timeEntries TimeEntry[]
   comments    Comment[]
+  dependencies Dependency[] @relation("DependentTask")
+  blockedBy    Dependency[] @relation("BlockingTask")
+  subtasks    Task[]  @relation("ParentTask")
+  parentTaskId String?
+  parentTask  Task?   @relation("ParentTask", fields: [parentTaskId], references: [id], onDelete: Cascade)
   
-  // Order for display
   order       Int      @default(0)
   
   createdAt   DateTime @default(now())
@@ -344,25 +332,22 @@ model Task {
   @@index([assigneeId])
   @@index([status])
   @@index([dueDate])
+  @@index([parentTaskId])
   @@map("tasks")
 }
 
-// Time Entry
 model TimeEntry {
   id          String   @id @default(uuid())
   
-  // Time
   startTime   DateTime
   endTime     DateTime?
-  duration    Decimal  // in hours
+  duration    Decimal
   description String?
   
-  // Billable
   billable    Boolean  @default(true)
   hourlyRate  Decimal?
-  amount      Decimal? // Calculated: duration * hourlyRate
+  amount      Decimal?
   
-  // Relations
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
@@ -382,7 +367,6 @@ model TimeEntry {
   @@map("time_entries")
 }
 
-// Document Management
 enum DocumentType {
   PROPOSAL
   CONTRACT
@@ -400,20 +384,16 @@ model Document {
   description String?
   type        DocumentType @default(OTHER)
   
-  // File info
   fileName    String
-  fileSize    Int      // in bytes
+  fileSize    Int
   mimeType    String
-  fileUrl     String   // S3/storage URL
+  fileUrl     String
   
-  // Version control
   version     Int      @default(1)
   
-  // Case
   caseId      String
   case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
   
-  // Uploaded by
   uploadedById String
   uploadedBy   User    @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
   
@@ -425,7 +405,6 @@ model Document {
   @@map("documents")
 }
 
-// Case Activity Feed
 enum CaseActivityAction {
   CREATED
   UPDATED
@@ -443,10 +422,10 @@ model CaseActivity {
   id          String   @id @default(uuid())
   
   action      CaseActivityAction
-  entity      String   // 'case', 'task', 'document', etc.
+  entity      String
   entityId    String?
-  description String   // Human-readable description
-  metadata    String?  // JSON for additional data
+  description String
+  metadata    String?
   
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -464,7 +443,6 @@ model CaseActivity {
   @@map("case_activities")
 }
 
-// Comments on tasks
 model Comment {
   id          String   @id @default(uuid())
   
@@ -482,4 +460,198 @@ model Comment {
   @@index([taskId])
   @@index([userId])
   @@map("comments")
+}
+
+// ============================================
+// MODULE 2: ADVANCED FEATURES
+// ============================================
+
+// Milestones (like Excel project tracking)
+enum MilestoneStatus {
+  UPCOMING
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+}
+
+model Milestone {
+  id          String   @id @default(uuid())
+  
+  title       String
+  description String?
+  dueDate     DateTime
+  completedAt DateTime?
+  status      MilestoneStatus @default(UPCOMING)
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  
+  order       Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([dueDate])
+  @@map("milestones")
+}
+
+// Risk Register (Excel-style risk tracking)
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RiskStatus {
+  IDENTIFIED
+  ASSESSING
+  MITIGATING
+  MONITORING
+  CLOSED
+}
+
+model Risk {
+  id          String   @id @default(uuid())
+  
+  title       String
+  description String
+  category    String?
+  
+  probability RiskLevel
+  impact      RiskLevel
+  riskScore   Int // Calculated: probability * impact
+  
+  status      RiskStatus @default(IDENTIFIED)
+  
+  mitigation  String?
+  contingency String?
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  
+  identifiedAt DateTime @default(now())
+  closedAt     DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([status])
+  @@index([riskScore])
+  @@map("risks")
+}
+
+// Task Dependencies (Gantt chart style)
+enum DependencyType {
+  FINISH_TO_START
+  START_TO_START
+  FINISH_TO_FINISH
+  START_TO_FINISH
+}
+
+model Dependency {
+  id          String   @id @default(uuid())
+  
+  type        DependencyType @default(FINISH_TO_START)
+  lagDays     Int      @default(0) // Delay between tasks
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  dependentTaskId String
+  dependentTask   Task   @relation("DependentTask", fields: [dependentTaskId], references: [id], onDelete: Cascade)
+  
+  blockingTaskId  String
+  blockingTask    Task   @relation("BlockingTask", fields: [blockingTaskId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  
+  @@unique([dependentTaskId, blockingTaskId])
+  @@index([caseId])
+  @@map("dependencies")
+}
+
+// Workflow Templates (Notion-style templates)
+model WorkflowTemplate {
+  id          String   @id @default(uuid())
+  
+  name        String
+  description String?
+  caseType    CaseType
+  
+  isPublic    Boolean  @default(false)
+  
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  templateData String // JSON: tasks, milestones, dependencies
+  
+  usageCount  Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([caseType])
+  @@map("workflow_templates")
+}
+
+// Custom Fields (Excel-style custom columns)
+enum FieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  MULTISELECT
+  CHECKBOX
+  URL
+}
+
+model CustomField {
+  id          String   @id @default(uuid())
+  
+  name        String
+  fieldType   FieldType
+  options     String[] // For SELECT/MULTISELECT
+  required    Boolean  @default(false)
+  
+  entityType  String // 'case', 'task', 'client'
+  
+  firmId      String
+  
+  values      CustomFieldValue[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([entityType])
+  @@map("custom_fields")
+}
+
+model CustomFieldValue {
+  id          String   @id @default(uuid())
+  
+  fieldId     String
+  field       CustomField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  
+  value       String
+  
+  caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([fieldId])
+  @@index([caseId])
+  @@map("custom_field_values")
 }
