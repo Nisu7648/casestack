@@ -1,0 +1,468 @@
+// CaseStack MVP - Lean Schema
+// Focus: Professional consulting workflow ONLY
+// No project management fluff
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MODULE A: FOUNDATION
+// ============================================
+
+model Firm {
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  
+  users           User[]
+  clients         Client[]
+  activityLogs    ActivityLog[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  password        String
+  
+  firstName       String
+  lastName        String
+  role            UserRole @default(CONSULTANT)
+  
+  firmId          String
+  firm            Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  isActive        Boolean  @default(true)
+  
+  // Relationships
+  clientsCreated  Client[] @relation("ClientCreatedBy")
+  reportsLead     Report[] @relation("ReportLead")
+  reportsReviewing Report[] @relation("ReportReviewer")
+  reportsApproving Report[] @relation("ReportApprover")
+  evidenceCollected Evidence[]
+  commentsAuthored ReportComment[] @relation("CommentAuthor")
+  reviews         ReportReview[]
+  activityLogs    ActivityLog[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([email])
+}
+
+enum UserRole {
+  CONSULTANT
+  MANAGER
+  PARTNER
+}
+
+// ============================================
+// MODULE B: CLIENT MANAGEMENT
+// ============================================
+
+model Client {
+  id              String   @id @default(cuid())
+  
+  name            String
+  uniqueIdentifier String  @unique
+  industry        String
+  country         String
+  
+  primaryContact  String?
+  email           String?
+  phone           String?
+  
+  status          ClientStatus @default(ACTIVE)
+  
+  firmId          String
+  firm            Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  createdById     String
+  createdBy       User     @relation("ClientCreatedBy", fields: [createdById], references: [id])
+  
+  contacts        ClientContact[]
+  engagements     Engagement[]
+  reports         Report[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([uniqueIdentifier])
+  @@index([status])
+}
+
+model ClientContact {
+  id              String   @id @default(cuid())
+  
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  name            String
+  title           String?
+  email           String?
+  phone           String?
+  isPrimary       Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([clientId])
+}
+
+model Engagement {
+  id              String   @id @default(cuid())
+  
+  engagementNumber String  @unique
+  name            String
+  year            Int
+  
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  status          EngagementStatus @default(ACTIVE)
+  
+  reports         Report[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([clientId])
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  PROSPECT
+}
+
+enum EngagementStatus {
+  ACTIVE
+  COMPLETED
+  ON_HOLD
+}
+
+// ============================================
+// MODULE C: REPORT LIFECYCLE
+// ============================================
+
+model Report {
+  id              String   @id @default(cuid())
+  
+  // Metadata
+  title           String
+  reportNumber    String   @unique
+  year            Int
+  type            ReportType
+  
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  engagementId    String?
+  engagement      Engagement? @relation(fields: [engagementId], references: [id])
+  
+  // Status Flow: Draft → Review → Final → Locked
+  status          ReportStatus @default(DRAFT)
+  
+  draftedAt       DateTime?
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  finalizedAt     DateTime?
+  lockedAt        DateTime?
+  
+  // Structured Sections
+  executiveSummary String?  @db.Text
+  scope           String?  @db.Text
+  methodology     String?  @db.Text
+  conclusion      String?  @db.Text
+  
+  sections        ReportSection[]
+  evidenceItems   Evidence[]
+  comments        ReportComment[]
+  reviews         ReportReview[]
+  
+  // Team
+  leadConsultantId String
+  leadConsultant  User     @relation("ReportLead", fields: [leadConsultantId], references: [id])
+  
+  reviewerId      String?
+  reviewer        User?    @relation("ReportReviewer", fields: [reviewerId], references: [id])
+  
+  approverId      String?
+  approver        User?    @relation("ReportApprover", fields: [approverId], references: [id])
+  
+  version         Int      @default(1)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([clientId])
+  @@index([status])
+  @@index([type])
+  @@index([year])
+}
+
+model ReportSection {
+  id              String   @id @default(cuid())
+  
+  reportId        String
+  report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  sectionType     SectionType
+  title           String
+  content         String   @db.Text
+  order           Int
+  
+  evidenceItems   Evidence[]
+  comments        ReportComment[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([reportId])
+  @@index([sectionType])
+}
+
+enum ReportType {
+  AUDIT
+  ADVISORY
+  COMPLIANCE
+  DUE_DILIGENCE
+  RISK_ASSESSMENT
+}
+
+enum ReportStatus {
+  DRAFT
+  IN_REVIEW
+  FINAL
+  LOCKED
+}
+
+enum SectionType {
+  OBSERVATION
+  FINDING
+}
+
+// ============================================
+// MODULE D: EVIDENCE MANAGEMENT
+// ============================================
+
+model Evidence {
+  id              String   @id @default(cuid())
+  
+  // Reference (metadata only, no file storage)
+  referenceNumber String   @unique
+  fileName        String
+  sourceLink      String?
+  description     String?  @db.Text
+  
+  reportId        String
+  report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  sectionId       String?
+  section         ReportSection? @relation(fields: [sectionId], references: [id])
+  
+  evidenceType    EvidenceType
+  
+  // Version tracking
+  version         Int      @default(1)
+  
+  // Verification
+  collectedBy     String
+  collector       User     @relation(fields: [collectedBy], references: [id])
+  
+  collectedAt     DateTime
+  verifiedAt      DateTime?
+  
+  status          EvidenceStatus @default(PENDING)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([reportId])
+  @@index([sectionId])
+  @@index([status])
+}
+
+enum EvidenceType {
+  DOCUMENT
+  SPREADSHEET
+  EMAIL
+  SCREENSHOT
+  INTERVIEW_NOTES
+  SYSTEM_EXTRACT
+  OTHER
+}
+
+enum EvidenceStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+// ============================================
+// MODULE E: REVIEW & APPROVAL
+// ============================================
+
+model ReportComment {
+  id              String   @id @default(cuid())
+  
+  reportId        String
+  report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  sectionId       String?
+  section         ReportSection? @relation(fields: [sectionId], references: [id])
+  
+  content         String   @db.Text
+  
+  // Threading
+  parentCommentId String?
+  parentComment   ReportComment? @relation("CommentThread", fields: [parentCommentId], references: [id])
+  replies         ReportComment[] @relation("CommentThread")
+  
+  status          CommentStatus @default(OPEN)
+  resolvedAt      DateTime?
+  
+  authorId        String
+  author          User     @relation("CommentAuthor", fields: [authorId], references: [id])
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([reportId])
+  @@index([sectionId])
+  @@index([status])
+}
+
+model ReportReview {
+  id              String   @id @default(cuid())
+  
+  reportId        String
+  report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  reviewType      ReviewType
+  status          ReviewStatus @default(PENDING)
+  
+  reviewerId      String
+  reviewer        User     @relation(fields: [reviewerId], references: [id])
+  
+  comments        String?  @db.Text
+  
+  decision        ReviewDecision?
+  signedOffAt     DateTime?
+  signature       String?
+  
+  assignedAt      DateTime @default(now())
+  completedAt     DateTime?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([reportId])
+  @@index([reviewerId])
+  @@index([status])
+}
+
+enum CommentStatus {
+  OPEN
+  RESOLVED
+}
+
+enum ReviewType {
+  MANAGER_REVIEW
+  PARTNER_REVIEW
+}
+
+enum ReviewStatus {
+  PENDING
+  COMPLETED
+}
+
+enum ReviewDecision {
+  APPROVED
+  REJECTED
+  NEEDS_REVISION
+}
+
+// ============================================
+// MODULE H: AUDIT LOG (IMMUTABLE)
+// ============================================
+
+model ActivityLog {
+  id              String   @id @default(cuid())
+  
+  action          AuditAction
+  entity          String
+  entityId        String
+  
+  description     String?
+  metadata        Json?
+  
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  
+  firmId          String
+  firm            Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  ipAddress       String?
+  userAgent       String?
+  
+  timestamp       DateTime @default(now())
+  
+  @@index([firmId])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([timestamp])
+}
+
+enum AuditAction {
+  // Report Actions
+  REPORT_CREATED
+  REPORT_UPDATED
+  REPORT_STATUS_CHANGED
+  REPORT_SUBMITTED
+  REPORT_FINALIZED
+  REPORT_LOCKED
+  
+  // Section Actions
+  SECTION_ADDED
+  SECTION_UPDATED
+  SECTION_DELETED
+  
+  // Evidence Actions
+  EVIDENCE_ADDED
+  EVIDENCE_UPDATED
+  EVIDENCE_VERIFIED
+  EVIDENCE_REJECTED
+  
+  // Review Actions
+  REVIEW_CREATED
+  REVIEW_COMPLETED
+  REVIEW_APPROVED
+  REVIEW_REJECTED
+  REVIEW_SIGNED_OFF
+  
+  // Comment Actions
+  COMMENT_ADDED
+  COMMENT_RESOLVED
+  
+  // Client Actions
+  CLIENT_CREATED
+  CLIENT_UPDATED
+  
+  // User Actions
+  USER_LOGIN
+  USER_LOGOUT
+  
+  // Dossier Actions
+  DOSSIER_GENERATED
+  DOSSIER_DOWNLOADED
+}
