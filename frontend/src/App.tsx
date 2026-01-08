@@ -1,43 +1,91 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthStore } from './stores/authStore'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import DashboardPage from './pages/DashboardPage'
-import CasesPage from './pages/CasesPage'
-import CaseDetailPage from './pages/CaseDetailPage'
-import UsersPage from './pages/UsersPage'
-import ActivityLogsPage from './pages/ActivityLogsPage'
-import Layout from './components/Layout'
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Layout from './components/Layout';
 
-function App() {
-  const { isAuthenticated } = useAuthStore()
+// Auth
+import Login from './pages/casestack/Login';
 
-  return (
-    <Routes>
-      {/* Public routes */}
-      <Route path="/login" element={
-        isAuthenticated ? <Navigate to="/dashboard" /> : <LoginPage />
-      } />
-      <Route path="/register" element={
-        isAuthenticated ? <Navigate to="/dashboard" /> : <RegisterPage />
-      } />
+// Main screens
+import Dashboard from './pages/casestack/Dashboard';
+import CaseList from './pages/casestack/CaseList';
+import CaseDetail from './pages/casestack/CaseDetail';
+import Search from './pages/casestack/Search';
+import Archive from './pages/casestack/Archive';
+import AuditLogs from './pages/casestack/AuditLogs';
+import Admin from './pages/casestack/Admin';
 
-      {/* Protected routes */}
-      <Route path="/" element={
-        isAuthenticated ? <Layout /> : <Navigate to="/login" />
-      }>
-        <Route index element={<Navigate to="/dashboard" />} />
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="cases" element={<CasesPage />} />
-        <Route path="cases/:id" element={<CaseDetailPage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="activity-logs" element={<ActivityLogsPage />} />
-      </Route>
+// ============================================
+// CASESTACK APP
+// Complete routing configuration
+// ============================================
 
-      {/* 404 */}
-      <Route path="*" element={<Navigate to="/" />} />
-    </Routes>
-  )
+// Protected Route Component
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const token = localStorage.getItem('token');
+  
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <Layout>{children}</Layout>;
 }
 
-export default App
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={<Login />} />
+        
+        {/* Protected Routes */}
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/cases" element={
+          <ProtectedRoute>
+            <CaseList />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/cases/:id" element={
+          <ProtectedRoute>
+            <CaseDetail />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/search" element={
+          <ProtectedRoute>
+            <Search />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/archive" element={
+          <ProtectedRoute>
+            <Archive />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/audit" element={
+          <ProtectedRoute>
+            <AuditLogs />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/admin" element={
+          <ProtectedRoute>
+            <Admin />
+          </ProtectedRoute>
+        } />
+        
+        {/* Default redirect */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
