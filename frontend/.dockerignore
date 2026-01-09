@@ -1,0 +1,65 @@
+# ============================================
+# CASESTACK FRONTEND - DOCKER IGNORE
+# Files to exclude from Docker build context
+# ============================================
+
+# Node modules
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.*
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+test/
+tests/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+coverage/
+__tests__/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Development
+.eslintrc*
+.prettierrc*
+tsconfig.json
+vite.config.ts
