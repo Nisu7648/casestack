@@ -1,159 +1,235 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const morgan = require('morgan');
+const path = require('path');
+require('dotenv').config();
+
+const { logger, logRequest, logError } = require('./utils/logger');
+const { notFound, errorHandler } = require('./middleware/errorHandler.middleware');
+const { apiLimiter, authLimiter, uploadLimiter, exportLimiter } = require('./middleware/rateLimiter.middleware');
+
+// ============================================
+// CASESTACK SERVER - FULLY INTEGRATED
+// All services, middleware, and routes connected
+// ============================================
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
 // ============================================
-// CASESTACK - FINALIZATION & DEFENSIBILITY SYSTEM
-// Server Configuration
+// SECURITY & MIDDLEWARE
 // ============================================
 
-// Security middleware
-app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+// Helmet for security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
 }));
 
+// CORS
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000', 'http://localhost:5173'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
+
+// Compression
+app.use(compression());
+
 // Body parsing
-app.use(express.json({ limit: '100mb' })); // Large files
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Logging
-app.use(morgan('combined'));
+// Request logging (Morgan + Winston)
+if (process.env.NODE_ENV === 'production') {
+  app.use(morgan('combined', {
+    stream: {
+      write: (message) => logger.info(message.trim())
+    }
+  }));
+} else {
+  app.use(morgan('dev'));
+}
+
+// Custom request logger
+app.use(logRequest);
+
+// Trust proxy (for Railway, Heroku, etc.)
+app.set('trust proxy', 1);
 
 // ============================================
-// CASESTACK ROUTES
+// HEALTH CHECK ROUTES (NO RATE LIMITING)
 // ============================================
 
+const healthRoutes = require('./routes/health');
+app.use('/', healthRoutes);
+
+// ============================================
+// API ROUTES WITH RATE LIMITING
+// ============================================
+
+// Auth routes (strict rate limiting)
 const authRoutes = require('./routes/casestack/auth');
-const casesRoutes = require('./routes/casestack/cases');
-const bundlesRoutes = require('./routes/casestack/bundles');
-const searchRoutes = require('./routes/casestack/search');
-const auditRoutes = require('./routes/casestack/audit');
-const clientsRoutes = require('./routes/casestack/clients');
-const usersRoutes = require('./routes/casestack/users');
-const settingsRoutes = require('./routes/casestack/settings');
+app.use('/api/auth', authLimiter, authRoutes);
 
-// Mount routes
-app.use('/api/auth', authRoutes);
+// Apply general rate limiting to all other API routes
+app.use('/api', apiLimiter);
+
+// Case management routes (with email integration)
+const casesRoutes = require('./routes/casestack/cases');
 app.use('/api/cases', casesRoutes);
-app.use('/api/bundles', bundlesRoutes);
+
+// File bundle routes (with upload/download/export)
+const bundlesRoutes = require('./routes/casestack/bundles');
+app.use('/api/bundles', uploadLimiter, bundlesRoutes);
+
+// Export routes (with rate limiting)
+app.use('/api/bundles/*/download*', exportLimiter);
+
+// Search routes (basic + advanced)
+const searchRoutes = require('./routes/casestack/search');
+const advancedSearchRoutes = require('./routes/casestack/search.advanced');
 app.use('/api/search', searchRoutes);
+app.use('/api/search/advanced', advancedSearchRoutes);
+
+// Audit log routes
+const auditRoutes = require('./routes/casestack/audit');
 app.use('/api/audit', auditRoutes);
+
+// Client management routes
+const clientsRoutes = require('./routes/casestack/clients');
 app.use('/api/clients', clientsRoutes);
+
+// User management routes
+const usersRoutes = require('./routes/casestack/users');
 app.use('/api/users', usersRoutes);
+
+// Firm settings routes
+const settingsRoutes = require('./routes/casestack/settings');
 app.use('/api/settings', settingsRoutes);
 
 // ============================================
-// HEALTH CHECK
+// STATIC FILE SERVING (for local storage)
 // ============================================
 
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'CASESTACK - Finalization & Defensibility System',
-    version: '1.0.0',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
+if (process.env.STORAGE_TYPE === 'local') {
+  const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
+  app.use('/files', express.static(uploadDir));
+  logger.info('Serving static files from: ' + uploadDir);
+}
 
 // ============================================
-// ROOT ENDPOINT
-// ============================================
-
-app.get('/', (req, res) => {
-  res.json({
-    service: 'CASESTACK',
-    tagline: 'Finalization, Accountability, Archival & Defensibility',
-    description: 'Enterprise-grade system for consulting, audit, tax, and advisory firms',
-    features: [
-      'Case Finalization System',
-      'File Bundle & Archival Engine',
-      'Firm Memory & Search',
-      'Responsibility & Defensibility Layer',
-      'Immutable Audit Logging',
-      'Download Tracking'
-    ],
-    status: 'operational',
-    documentation: '/api/docs'
-  });
-});
-
-// ============================================
-// ERROR HANDLERS
+// ERROR HANDLING
 // ============================================
 
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    error: 'Route not found',
-    path: req.path,
-    method: req.method
+app.use(notFound);
+
+// Global error handler
+app.use(logError);
+app.use(errorHandler);
+
+// ============================================
+// GRACEFUL SHUTDOWN
+// ============================================
+
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+const gracefulShutdown = async (signal) => {
+  logger.info(`${signal} received. Starting graceful shutdown...`);
+  
+  // Close server
+  server.close(async () => {
+    logger.info('HTTP server closed');
+    
+    // Disconnect Prisma
+    await prisma.$disconnect();
+    logger.info('Database connection closed');
+    
+    // Exit process
+    process.exit(0);
+  });
+  
+  // Force shutdown after 30 seconds
+  setTimeout(() => {
+    logger.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 30000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Unhandled rejection handler
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection', {
+    reason: reason,
+    promise: promise
   });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-
-  // Multer file upload errors
-  if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({
-      error: 'File too large',
-      message: 'Maximum file size is 100MB'
-    });
-  }
-
-  if (err.message && err.message.includes('Invalid file type')) {
-    return res.status(400).json({
-      error: 'Invalid file type',
-      message: err.message
-    });
-  }
-
-  // Generic error
-  res.status(500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+// Uncaught exception handler
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception', {
+    error: error.message,
+    stack: error.stack
   });
+  process.exit(1);
 });
 
 // ============================================
 // START SERVER
 // ============================================
 
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log('');
-  console.log('╔═══════════════════════════════════════════════════════════╗');
-  console.log('║                                                           ║');
-  console.log('║                      CASESTACK                            ║');
-  console.log('║     Finalization & Defensibility System                  ║');
-  console.log('║                                                           ║');
-  console.log('╚═══════════════════════════════════════════════════════════╝');
-  console.log('');
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔐 API Base: http://localhost:${PORT}/api`);
-  console.log('');
-  console.log('Core Features:');
-  console.log('  ✅ Case Finalization System');
-  console.log('  ✅ File Bundle & Archival Engine');
-  console.log('  ✅ Firm Memory & Search');
-  console.log('  ✅ Responsibility & Defensibility Layer');
-  console.log('  ✅ Immutable Audit Logging');
-  console.log('  ✅ Download Tracking');
-  console.log('');
-  console.log('🎯 Target: Consulting, Audit, Tax & Advisory Firms');
-  console.log('💰 Pricing: Per employee/month (₹1,399 India, €25-50 Europe)');
-  console.log('');
+const server = app.listen(PORT, async () => {
+  logger.info('========================================');
+  logger.info('CASESTACK SERVER STARTED');
+  logger.info('========================================');
+  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`Port: ${PORT}`);
+  logger.info(`Storage: ${process.env.STORAGE_TYPE || 'local'}`);
+  logger.info(`CORS: ${corsOptions.origin}`);
+  logger.info('========================================');
+  
+  // Test database connection
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    logger.info('✓ Database connected');
+  } catch (error) {
+    logger.error('✗ Database connection failed:', error.message);
+  }
+  
+  // Test email service
+  const emailService = require('./services/email.service');
+  const emailReady = await emailService.testConnection();
+  if (emailReady) {
+    logger.info('✓ Email service ready');
+  } else {
+    logger.warn('✗ Email service not configured (optional)');
+  }
+  
+  // Log startup metrics
+  const memUsage = process.memoryUsage();
+  logger.info('Memory usage', {
+    heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + ' MB',
+    heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + ' MB'
+  });
+  
+  logger.info('========================================');
+  logger.info('✓ All services initialized');
+  logger.info('✓ Server ready to accept requests');
+  logger.info('========================================');
 });
 
 module.exports = app;
