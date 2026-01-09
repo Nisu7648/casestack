@@ -5,13 +5,25 @@
 
 ---
 
+## 🚀 **ONE-CLICK DEPLOY (100% FREE)**
+
+### **Deploy Backend to Render.com:**
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Nisu7648/casestack)
+
+### **Deploy Frontend to Vercel:**
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Nisu7648/casestack/tree/main/frontend&env=VITE_API_URL&envDescription=Backend%20API%20URL&envLink=https://github.com/Nisu7648/casestack/blob/main/FREE_DEPLOYMENT_GUIDE.md)
+
+**📖 Detailed Guide:** [FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)
+
+---
+
 ## ✅ **SYSTEM STATUS: 100% COMPLETE & INTEGRATED**
 
 All services, screens, and features are fully connected and working together.
 
 ---
 
-## 🚀 **QUICK START**
+## 🚀 **QUICK START (LOCAL)**
 
 ### **Automated Setup (Recommended)**
 
@@ -68,6 +80,7 @@ See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed instructions.
 ### **Documentation (100% Complete)**
 - ✅ API Documentation
 - ✅ Deployment Guide
+- ✅ **Free Deployment Guide** 🆓
 - ✅ Integration Guide
 - ✅ **Device Session Management Guide** 🔐
 - ✅ Setup Instructions
@@ -151,6 +164,7 @@ casestack/
 │   │   ├── schema.casestack.prisma (with DeviceSession)
 │   │   └── migrations/
 │   ├── scripts/             # Backup/restore
+│   ├── render.json          # Render.com config
 │   └── package.json
 ├── frontend/
 │   ├── src/
@@ -158,8 +172,10 @@ casestack/
 │   │   ├── components/      # Reusable components
 │   │   ├── services/        # API integration (+ device mgmt)
 │   │   └── App.tsx
+│   ├── vercel.json          # Vercel config
 │   └── package.json
 ├── INTEGRATION_GUIDE.md     # Setup instructions
+├── FREE_DEPLOYMENT_GUIDE.md # Free hosting guide
 ├── DEVICE_SESSION_MANAGEMENT.md  # Device session docs
 ├── API_DOCUMENTATION.md     # API reference
 ├── DEPLOYMENT_GUIDE.md      # Deployment guide
@@ -194,6 +210,7 @@ casestack/
 
 ## 📚 **DOCUMENTATION**
 
+- **[Free Deployment Guide](FREE_DEPLOYMENT_GUIDE.md)** - Deploy for FREE in 15 minutes 🆓
 - **[Integration Guide](INTEGRATION_GUIDE.md)** - Complete setup and testing
 - **[Device Session Management](DEVICE_SESSION_MANAGEMENT.md)** - Max 3 devices feature 🔐
 - **[API Documentation](API_DOCUMENTATION.md)** - All endpoints with examples
@@ -238,31 +255,27 @@ See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for complete workflow testing.
 
 ---
 
-## 🚀 **DEPLOYMENT**
+## 🚀 **DEPLOYMENT OPTIONS**
 
-### **Railway (Recommended)**
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
+### **Option 1: Free Hosting (Recommended for Testing)** 🆓
+- **Backend:** Render.com (Free tier)
+- **Database:** Render PostgreSQL (Free 90 days)
+- **Frontend:** Vercel (Free forever)
+- **Total Cost:** $0/month
+- **Guide:** [FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)
 
-# Login
-railway login
+### **Option 2: Production Hosting** 💰
+- **Backend:** Render.com ($7/month)
+- **Database:** Render PostgreSQL ($7/month)
+- **Frontend:** Vercel (Free)
+- **Total Cost:** $14/month
+- **Guide:** [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
 
-# Deploy backend
-cd backend
-railway up
-
-# Deploy frontend to Vercel
-cd frontend
-vercel deploy
-```
-
-### **Docker**
-```bash
-docker-compose up -d
-```
-
-See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for detailed instructions.
+### **Option 3: Self-Hosted**
+- Docker Compose
+- Your own server
+- Full control
+- **Guide:** [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
 
 ---
 
@@ -335,11 +348,12 @@ VITE_API_URL=http://localhost:5000
 ## 📞 **SUPPORT**
 
 For issues or questions:
-1. Check [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)
-2. Check [DEVICE_SESSION_MANAGEMENT.md](DEVICE_SESSION_MANAGEMENT.md)
-3. Check [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
-4. Check logs: `tail -f backend/logs/combined.log`
-5. Check database: `npx prisma studio`
+1. Check [FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)
+2. Check [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)
+3. Check [DEVICE_SESSION_MANAGEMENT.md](DEVICE_SESSION_MANAGEMENT.md)
+4. Check [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+5. Check logs: `tail -f backend/logs/combined.log`
+6. Check database: `npx prisma studio`
 
 ---
 
@@ -354,12 +368,13 @@ Proprietary - All rights reserved
 **Everything is complete, integrated, and working.**
 
 **Next steps:**
-1. Run `./quickstart.sh`
-2. Test complete workflow
-3. Test device session management
-4. Deploy to production
-5. Get first customer
-6. Launch! 🚀
+1. Click "Deploy to Render" button above 👆
+2. Click "Deploy to Vercel" button above 👆
+3. Or run `./quickstart.sh` for local testing
+4. Test complete workflow
+5. Test device session management
+6. Get first customer
+7. Launch! 🚀
 
 ---
 
