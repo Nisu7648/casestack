@@ -1,62 +1,49 @@
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
-const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { auditLogger } = require('../../middleware/audit.middleware');
+const fileStorageService = require('../../services/fileStorage.service');
+const pdfExportService = require('../../services/pdfExport.service');
+const archiver = require('archiver');
+const fs = require('fs');
 
 const prisma = new PrismaClient();
-
-// ============================================
-// FILE BUNDLE & ARCHIVAL ENGINE
-// Files are uploaded ONLY for finalization
-// ============================================
-
-// Configure multer for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 100 * 1024 * 1024 // 100MB max per file
-  },
-  fileFilter: (req, file, cb) => {
-    // Only allow specific file types
-    const allowedTypes = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // XLSX
-      'application/vnd.ms-excel', // XLS
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
-      'application/msword', // DOC
-      'application/zip',
-      'application/x-zip-compressed'
-    ];
-
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF, XLSX, DOCX, and ZIP allowed.'));
-    }
-  }
-});
+const upload = fileStorageService.getMulterConfig();
 
 router.use(authenticate);
+
+// ============================================
+// FILE BUNDLE MODULE (ENHANCED)
+// Upload, download, export with file integrity
+// ============================================
 
 // Get all bundles for a case
 router.get('/case/:caseId', async (req, res) => {
   try {
+    const { caseId } = req.params;
+
+    const caseData = await prisma.case.findUnique({
+      where: { id: caseId },
+      include: { firm: true }
+    });
+
+    if (!caseData || caseData.firmId !== req.firmId) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+
     const bundles = await prisma.caseBundle.findMany({
-      where: {
-        caseId: req.params.caseId,
-        case: {
-          firmId: req.firmId
-        }
-      },
+      where: { caseId },
       include: {
         files: {
           include: {
             uploadedBy: {
-              select: { firstName: true, lastName: true }
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true
+              }
             }
           },
           orderBy: { createdAt: 'desc' }
@@ -75,140 +62,123 @@ router.get('/case/:caseId', async (req, res) => {
 // Create new bundle
 router.post('/case/:caseId', auditLogger('BUNDLE_CREATED', 'BUNDLE'), async (req, res) => {
   try {
+    const { caseId } = req.params;
     const { bundleName } = req.body;
 
-    if (!bundleName) {
-      return res.status(400).json({ error: 'Bundle name is required' });
-    }
-
-    // Verify case exists and is not finalized
-    const caseData = await prisma.case.findFirst({
-      where: {
-        id: req.params.caseId,
-        firmId: req.firmId
-      }
+    const caseData = await prisma.case.findUnique({
+      where: { id: caseId }
     });
 
-    if (!caseData) {
+    if (!caseData || caseData.firmId !== req.firmId) {
       return res.status(404).json({ error: 'Case not found' });
     }
 
     if (caseData.status === 'FINALIZED') {
-      return res.status(400).json({ error: 'Cannot add bundles to finalized case' });
+      return res.status(400).json({ error: 'Cannot create bundle for finalized case' });
     }
 
     const bundle = await prisma.caseBundle.create({
       data: {
-        bundleName,
-        caseId: req.params.caseId,
+        bundleName: bundleName || 'Document Bundle',
+        caseId,
         version: 1
       }
     });
 
-    res.status(201).json({ bundle });
+    res.json({ bundle });
   } catch (error) {
     console.error('Create bundle error:', error);
     res.status(500).json({ error: 'Failed to create bundle' });
   }
 });
 
-// Upload files to bundle
-router.post('/:bundleId/upload', upload.array('files', 20), auditLogger('FILE_UPLOADED', 'FILE'), async (req, res) => {
+// Upload files to bundle (ENHANCED WITH ACTUAL FILE STORAGE)
+router.post('/:bundleId/upload', upload.array('files', 10), auditLogger('FILE_UPLOADED', 'FILE'), async (req, res) => {
   try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'No files uploaded' });
-    }
+    const { bundleId } = req.params;
 
-    // Verify bundle exists and case is not finalized
-    const bundle = await prisma.caseBundle.findFirst({
-      where: {
-        id: req.params.bundleId,
-        case: {
-          firmId: req.firmId
-        }
-      },
+    const bundle = await prisma.caseBundle.findUnique({
+      where: { id: bundleId },
       include: {
         case: true
       }
     });
 
-    if (!bundle) {
+    if (!bundle || bundle.case.firmId !== req.firmId) {
       return res.status(404).json({ error: 'Bundle not found' });
     }
 
     if (bundle.case.status === 'FINALIZED') {
-      return res.status(400).json({ error: 'Cannot upload files to finalized case' });
+      return res.status(400).json({ error: 'Cannot upload to finalized case' });
     }
 
-    if (bundle.isFinalized) {
-      return res.status(400).json({ error: 'Bundle is finalized' });
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
     }
 
-    // Process each file
+    // Upload files and create records
     const uploadedFiles = [];
 
     for (const file of req.files) {
-      // Calculate file hash for integrity
-      const fileHash = crypto
-        .createHash('sha256')
-        .update(file.buffer)
-        .digest('hex');
+      // Upload file to storage (S3 or local)
+      const fileData = await fileStorageService.uploadFile(
+        file,
+        req.firmId,
+        bundle.caseId
+      );
 
       // Determine file type
       let fileType = 'OTHER';
       if (file.mimetype === 'application/pdf') fileType = 'PDF';
-      else if (file.mimetype.includes('spreadsheet') || file.mimetype.includes('excel')) fileType = 'XLSX';
-      else if (file.mimetype.includes('word')) fileType = 'DOCX';
-      else if (file.mimetype.includes('zip')) fileType = 'ZIP';
+      else if (file.mimetype.includes('spreadsheet')) fileType = 'XLSX';
+      else if (file.mimetype.includes('wordprocessing')) fileType = 'DOCX';
+      else if (file.mimetype === 'application/zip') fileType = 'ZIP';
 
-      // In production, upload to S3/Azure Blob
-      // For now, store metadata only
-      const storageUrl = `file://storage/${bundle.caseId}/${req.params.bundleId}/${file.originalname}`;
-      const storagePath = `/storage/${bundle.caseId}/${req.params.bundleId}/${file.originalname}`;
-
-      const uploadedFile = await prisma.caseFile.create({
+      // Create file record
+      const fileRecord = await prisma.caseFile.create({
         data: {
-          fileName: file.originalname,
+          fileName: fileData.fileName,
           fileType,
-          fileSize: file.size,
-          fileHash,
-          bundleId: req.params.bundleId,
-          storageUrl,
-          storagePath,
-          uploadedById: req.userId
+          fileSize: fileData.fileSize,
+          fileHash: fileData.fileHash,
+          bundleId,
+          storageUrl: fileData.storageUrl,
+          storagePath: fileData.storagePath,
+          uploadedById: req.userId,
+          isLocked: false
         },
         include: {
           uploadedBy: {
-            select: { firstName: true, lastName: true }
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true
+            }
           }
         }
       });
 
-      uploadedFiles.push(uploadedFile);
+      uploadedFiles.push(fileRecord);
     }
 
-    res.status(201).json({
-      message: `${uploadedFiles.length} file(s) uploaded successfully`,
+    res.json({
+      message: `${uploadedFiles.length} files uploaded successfully`,
       files: uploadedFiles
     });
   } catch (error) {
-    console.error('Upload files error:', error);
-    res.status(500).json({ error: 'Failed to upload files' });
+    console.error('Upload error:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload files' });
   }
 });
 
-// Download single file (with tracking)
+// Download single file (ENHANCED WITH ACTUAL FILE DOWNLOAD)
 router.get('/file/:fileId/download', auditLogger('FILE_DOWNLOADED', 'FILE'), async (req, res) => {
   try {
-    const file = await prisma.caseFile.findFirst({
-      where: {
-        id: req.params.fileId,
-        bundle: {
-          case: {
-            firmId: req.firmId
-          }
-        }
-      },
+    const { fileId } = req.params;
+
+    const file = await prisma.caseFile.findUnique({
+      where: { id: fileId },
       include: {
         bundle: {
           include: {
@@ -218,7 +188,7 @@ router.get('/file/:fileId/download', auditLogger('FILE_DOWNLOADED', 'FILE'), asy
       }
     });
 
-    if (!file) {
+    if (!file || file.bundle.case.firmId !== req.firmId) {
       return res.status(404).json({ error: 'File not found' });
     }
 
@@ -228,51 +198,40 @@ router.get('/file/:fileId/download', auditLogger('FILE_DOWNLOADED', 'FILE'), asy
         caseId: file.bundle.caseId,
         userId: req.userId,
         downloadType: 'SINGLE_FILE',
-        fileIds: [file.id],
+        fileIds: [fileId],
         ipAddress: req.ip,
         userAgent: req.get('user-agent')
       }
     });
 
-    // In production, generate signed URL from S3/Azure
-    // For now, return file metadata
-    res.json({
-      message: 'File download initiated',
-      file: {
-        fileName: file.fileName,
-        fileType: file.fileType,
-        fileSize: file.fileSize,
-        downloadUrl: file.storageUrl // In production, this would be a signed URL
-      }
-    });
+    // Get file stream
+    const fileStream = await fileStorageService.getFileStream(file.storagePath);
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    
+    fileStream.pipe(res);
   } catch (error) {
-    console.error('Download file error:', error);
+    console.error('Download error:', error);
     res.status(500).json({ error: 'Failed to download file' });
   }
 });
 
-// Download full bundle (with tracking)
+// Download full bundle as ZIP
 router.get('/:bundleId/download', auditLogger('BUNDLE_DOWNLOADED', 'BUNDLE'), async (req, res) => {
   try {
-    const bundle = await prisma.caseBundle.findFirst({
-      where: {
-        id: req.params.bundleId,
-        case: {
-          firmId: req.firmId
-        }
-      },
+    const { bundleId } = req.params;
+
+    const bundle = await prisma.caseBundle.findUnique({
+      where: { id: bundleId },
       include: {
         files: true,
         case: true
       }
     });
 
-    if (!bundle) {
+    if (!bundle || bundle.case.firmId !== req.firmId) {
       return res.status(404).json({ error: 'Bundle not found' });
-    }
-
-    if (bundle.files.length === 0) {
-      return res.status(400).json({ error: 'Bundle has no files' });
     }
 
     // Log download
@@ -287,145 +246,124 @@ router.get('/:bundleId/download', auditLogger('BUNDLE_DOWNLOADED', 'BUNDLE'), as
       }
     });
 
-    // In production, create ZIP and return signed URL
-    res.json({
-      message: 'Bundle download initiated',
-      bundle: {
-        bundleName: bundle.bundleName,
-        fileCount: bundle.files.length,
-        totalSize: bundle.files.reduce((sum, f) => sum + f.fileSize, 0),
-        files: bundle.files.map(f => ({
-          fileName: f.fileName,
-          fileType: f.fileType,
-          fileSize: f.fileSize
-        }))
-      }
-    });
+    // Create ZIP archive
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${bundle.bundleName}-${Date.now()}.zip"`);
+    
+    archive.pipe(res);
+
+    // Add files to archive
+    for (const file of bundle.files) {
+      const fileStream = await fileStorageService.getFileStream(file.storagePath);
+      archive.append(fileStream, { name: file.fileName });
+    }
+
+    archive.finalize();
   } catch (error) {
-    console.error('Download bundle error:', error);
+    console.error('Bundle download error:', error);
     res.status(500).json({ error: 'Failed to download bundle' });
   }
 });
 
-// Download full case (all bundles) - Audit-ready export
+// Download all case files (audit-ready export)
 router.get('/case/:caseId/download-all', auditLogger('CASE_EXPORTED', 'CASE'), async (req, res) => {
   try {
-    const caseData = await prisma.case.findFirst({
-      where: {
-        id: req.params.caseId,
-        firmId: req.firmId
-      },
+    const { caseId } = req.params;
+
+    const caseData = await prisma.case.findUnique({
+      where: { id: caseId },
       include: {
         client: true,
-        preparedBy: {
-          select: { firstName: true, lastName: true }
-        },
-        reviewedBy: {
-          select: { firstName: true, lastName: true }
-        },
-        approvedBy: {
-          select: { firstName: true, lastName: true }
-        },
+        preparedBy: true,
+        reviewedBy: true,
+        approvedBy: true,
         bundles: {
           include: {
             files: true
           }
-        },
-        approvalChain: {
-          include: {
-            actionBy: {
-              select: { firstName: true, lastName: true, role: true }
-            }
-          },
-          orderBy: { createdAt: 'asc' }
         }
       }
     });
 
-    if (!caseData) {
+    if (!caseData || caseData.firmId !== req.firmId) {
       return res.status(404).json({ error: 'Case not found' });
     }
 
-    const allFiles = caseData.bundles.flatMap(b => b.files);
+    // Get approval chain
+    const approvalChain = await prisma.approvalChain.findMany({
+      where: { caseId },
+      include: {
+        actionBy: {
+          select: {
+            firstName: true,
+            lastName: true,
+            role: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
 
-    if (allFiles.length === 0) {
-      return res.status(400).json({ error: 'Case has no files' });
-    }
+    // Generate PDF export
+    const pdfResult = await pdfExportService.generateCaseExportPDF(
+      caseData,
+      caseData.bundles,
+      approvalChain
+    );
 
     // Log download
+    const allFileIds = caseData.bundles.flatMap(b => b.files.map(f => f.id));
     await prisma.downloadLog.create({
       data: {
-        caseId: req.params.caseId,
+        caseId,
         userId: req.userId,
         downloadType: 'AUDIT_EXPORT',
-        fileIds: allFiles.map(f => f.id),
+        fileIds: allFileIds,
         ipAddress: req.ip,
         userAgent: req.get('user-agent')
       }
     });
 
-    // Generate audit-ready export package
-    const exportPackage = {
-      caseNumber: caseData.caseNumber,
-      caseName: caseData.caseName,
-      client: caseData.client.name,
-      fiscalYear: caseData.fiscalYear,
-      status: caseData.status,
-      
-      responsibilityChain: {
-        preparedBy: `${caseData.preparedBy.firstName} ${caseData.preparedBy.lastName}`,
-        reviewedBy: caseData.reviewedBy ? `${caseData.reviewedBy.firstName} ${caseData.reviewedBy.lastName}` : null,
-        approvedBy: caseData.approvedBy ? `${caseData.approvedBy.firstName} ${caseData.approvedBy.lastName}` : null,
-        finalizedAt: caseData.finalizedAt
-      },
-      
-      approvalHistory: caseData.approvalChain.map(a => ({
-        action: a.action,
-        by: `${a.actionBy.firstName} ${a.actionBy.lastName} (${a.actionBy.role})`,
-        at: a.createdAt,
-        comments: a.comments
-      })),
-      
-      bundles: caseData.bundles.map(b => ({
-        bundleName: b.bundleName,
-        version: b.version,
-        isFinalized: b.isFinalized,
-        fileCount: b.files.length,
-        files: b.files.map(f => ({
-          fileName: f.fileName,
-          fileType: f.fileType,
-          fileSize: f.fileSize,
-          fileHash: f.fileHash,
-          isLocked: f.isLocked
-        }))
-      })),
-      
-      totalFiles: allFiles.length,
-      totalSize: allFiles.reduce((sum, f) => sum + f.fileSize, 0)
-    };
+    // Create ZIP with PDF + all files
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="CASE-${caseData.caseNumber}-EXPORT-${Date.now()}.zip"`);
+    
+    archive.pipe(res);
 
-    res.json({
-      message: 'Audit-ready export package generated',
-      export: exportPackage
+    // Add PDF export
+    archive.file(pdfResult.filePath, { name: pdfResult.fileName });
+
+    // Add all files organized by bundle
+    for (const bundle of caseData.bundles) {
+      for (const file of bundle.files) {
+        const fileStream = await fileStorageService.getFileStream(file.storagePath);
+        archive.append(fileStream, { name: `${bundle.bundleName}/${file.fileName}` });
+      }
+    }
+
+    archive.finalize();
+
+    // Clean up PDF after sending
+    archive.on('end', () => {
+      fs.unlinkSync(pdfResult.filePath);
     });
   } catch (error) {
-    console.error('Export case error:', error);
+    console.error('Export error:', error);
     res.status(500).json({ error: 'Failed to export case' });
   }
 });
 
-// Delete file (only if case not finalized)
+// Delete file (only if not locked)
 router.delete('/file/:fileId', auditLogger('FILE_DELETED', 'FILE'), async (req, res) => {
   try {
-    const file = await prisma.caseFile.findFirst({
-      where: {
-        id: req.params.fileId,
-        bundle: {
-          case: {
-            firmId: req.firmId
-          }
-        }
-      },
+    const { fileId } = req.params;
+
+    const file = await prisma.caseFile.findUnique({
+      where: { id: fileId },
       include: {
         bundle: {
           include: {
@@ -435,20 +373,20 @@ router.delete('/file/:fileId', auditLogger('FILE_DELETED', 'FILE'), async (req, 
       }
     });
 
-    if (!file) {
+    if (!file || file.bundle.case.firmId !== req.firmId) {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    if (file.isLocked) {
-      return res.status(403).json({ error: 'Cannot delete locked file' });
+    if (file.isLocked || file.bundle.case.status === 'FINALIZED') {
+      return res.status(400).json({ error: 'Cannot delete locked or finalized file' });
     }
 
-    if (file.bundle.case.status === 'FINALIZED') {
-      return res.status(403).json({ error: 'Cannot delete files from finalized case' });
-    }
+    // Delete from storage
+    await fileStorageService.deleteFile(file.storagePath);
 
+    // Delete from database
     await prisma.caseFile.delete({
-      where: { id: req.params.fileId }
+      where: { id: fileId }
     });
 
     res.json({ message: 'File deleted successfully' });
