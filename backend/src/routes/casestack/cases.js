@@ -4,19 +4,25 @@ const { PrismaClient } = require('@prisma/client');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { requirePartner, requireManager } = require('../../middleware/rbac.middleware');
 const { auditLogger } = require('../../middleware/audit.middleware');
+const { caseValidation, paginationValidation } = require('../../middleware/validation.middleware');
+const emailService = require('../../services/email.service');
+const { logger } = require('../../utils/logger');
 
 const prisma = new PrismaClient();
 
 router.use(authenticate);
 
 // ============================================
-// CASE FINALIZATION SYSTEM (CORE)
+// CASE MANAGEMENT - FULLY INTEGRATED
+// With email notifications, validation, logging
 // ============================================
 
 // Get all cases with filters
-router.get('/', auditLogger('CASE_VIEWED', 'CASE'), async (req, res) => {
+router.get('/', paginationValidation, auditLogger('CASE_VIEWED', 'CASE'), async (req, res) => {
   try {
-    const { status, fiscalYear, clientId, caseType } = req.query;
+    const { status, fiscalYear, clientId, caseType, page = 1, limit = 20 } = req.query;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {
       firmId: req.firmId,
@@ -26,31 +32,44 @@ router.get('/', auditLogger('CASE_VIEWED', 'CASE'), async (req, res) => {
       ...(caseType && { caseType })
     };
 
-    const cases = await prisma.case.findMany({
-      where,
-      include: {
-        client: {
-          select: { id: true, name: true, industry: true }
+    const [cases, total] = await Promise.all([
+      prisma.case.findMany({
+        where,
+        include: {
+          client: {
+            select: { id: true, name: true, industry: true }
+          },
+          preparedBy: {
+            select: { id: true, firstName: true, lastName: true, role: true }
+          },
+          reviewedBy: {
+            select: { id: true, firstName: true, lastName: true, role: true }
+          },
+          approvedBy: {
+            select: { id: true, firstName: true, lastName: true, role: true }
+          },
+          bundles: {
+            select: { id: true, bundleName: true, isFinalized: true }
+          }
         },
-        preparedBy: {
-          select: { id: true, firstName: true, lastName: true, role: true }
-        },
-        reviewedBy: {
-          select: { id: true, firstName: true, lastName: true, role: true }
-        },
-        approvedBy: {
-          select: { id: true, firstName: true, lastName: true, role: true }
-        },
-        bundles: {
-          select: { id: true, bundleName: true, isFinalized: true }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.case.count({ where })
+    ]);
 
-    res.json({ cases });
+    res.json({
+      cases,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
   } catch (error) {
-    console.error('Get cases error:', error);
+    logger.error('Get cases error:', error);
     res.status(500).json({ error: 'Failed to fetch cases' });
   }
 });
@@ -105,13 +124,13 @@ router.get('/:id', auditLogger('CASE_VIEWED', 'CASE'), async (req, res) => {
 
     res.json({ case: caseData });
   } catch (error) {
-    console.error('Get case error:', error);
+    logger.error('Get case error:', error);
     res.status(500).json({ error: 'Failed to fetch case' });
   }
 });
 
 // Create new case (DRAFT only)
-router.post('/', auditLogger('CASE_CREATED', 'CASE'), async (req, res) => {
+router.post('/', caseValidation.create, auditLogger('CASE_CREATED', 'CASE'), async (req, res) => {
   try {
     const {
       caseName,
@@ -123,10 +142,6 @@ router.post('/', auditLogger('CASE_CREATED', 'CASE'), async (req, res) => {
       description,
       tags
     } = req.body;
-
-    if (!caseName || !caseType || !clientId || !periodStart || !periodEnd || !fiscalYear) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
 
     // Verify client exists
     const client = await prisma.client.findFirst({
@@ -167,26 +182,30 @@ router.post('/', auditLogger('CASE_CREATED', 'CASE'), async (req, res) => {
       }
     });
 
+    logger.info('Case created', { caseId: caseData.id, caseNumber: caseData.caseNumber });
+
     res.status(201).json({ case: caseData });
   } catch (error) {
-    console.error('Create case error:', error);
+    logger.error('Create case error:', error);
     res.status(500).json({ error: 'Failed to create case' });
   }
 });
 
-// Submit case for review (DRAFT → UNDER_REVIEW)
+// Submit case for review (DRAFT → UNDER_REVIEW) - WITH EMAIL
 router.post('/:id/submit', auditLogger('CASE_SUBMITTED', 'CASE'), async (req, res) => {
   try {
     const caseData = await prisma.case.findFirst({
       where: {
         id: req.params.id,
         firmId: req.firmId,
-        preparedById: req.userId // Only preparer can submit
+        preparedById: req.userId
       },
       include: {
         bundles: {
           include: { files: true }
-        }
+        },
+        client: true,
+        preparedBy: true
       }
     });
 
@@ -202,6 +221,15 @@ router.post('/:id/submit', auditLogger('CASE_SUBMITTED', 'CASE'), async (req, re
       return res.status(400).json({ error: 'Cannot submit case without files' });
     }
 
+    // Get all managers and partners to notify
+    const reviewers = await prisma.user.findMany({
+      where: {
+        firmId: req.firmId,
+        role: { in: ['MANAGER', 'PARTNER', 'ADMIN'] },
+        isActive: true
+      }
+    });
+
     // Update case status
     const updated = await prisma.$transaction(async (tx) => {
       const updatedCase = await tx.case.update({
@@ -212,7 +240,6 @@ router.post('/:id/submit', auditLogger('CASE_SUBMITTED', 'CASE'), async (req, re
         }
       });
 
-      // Create approval chain entry
       await tx.approvalChain.create({
         data: {
           caseId: req.params.id,
@@ -224,18 +251,29 @@ router.post('/:id/submit', auditLogger('CASE_SUBMITTED', 'CASE'), async (req, re
       return updatedCase;
     });
 
+    // Send email notifications to reviewers
+    for (const reviewer of reviewers) {
+      try {
+        await emailService.sendCaseSubmittedNotification(caseData, reviewer);
+      } catch (emailError) {
+        logger.error('Email notification error:', emailError);
+      }
+    }
+
+    logger.info('Case submitted', { caseId: updated.id, reviewersNotified: reviewers.length });
+
     res.json({
-      message: 'Case submitted for review',
+      message: 'Case submitted for review. Notifications sent to reviewers.',
       case: updated
     });
   } catch (error) {
-    console.error('Submit case error:', error);
+    logger.error('Submit case error:', error);
     res.status(500).json({ error: 'Failed to submit case' });
   }
 });
 
-// Review case (Manager+ only)
-router.post('/:id/review', requireManager, auditLogger('CASE_REVIEWED', 'CASE'), async (req, res) => {
+// Review case (Manager+ only) - WITH EMAIL
+router.post('/:id/review', requireManager, caseValidation.review, auditLogger('CASE_REVIEWED', 'CASE'), async (req, res) => {
   try {
     const { approved, comments } = req.body;
 
@@ -243,6 +281,11 @@ router.post('/:id/review', requireManager, auditLogger('CASE_REVIEWED', 'CASE'),
       where: {
         id: req.params.id,
         firmId: req.firmId
+      },
+      include: {
+        client: true,
+        preparedBy: true,
+        reviewedBy: true
       }
     });
 
@@ -255,7 +298,7 @@ router.post('/:id/review', requireManager, auditLogger('CASE_REVIEWED', 'CASE'),
     }
 
     if (approved) {
-      // Approve - ready for partner finalization
+      // APPROVED - Ready for partner finalization
       const updated = await prisma.$transaction(async (tx) => {
         const updatedCase = await tx.case.update({
           where: { id: req.params.id },
@@ -276,18 +319,30 @@ router.post('/:id/review', requireManager, auditLogger('CASE_REVIEWED', 'CASE'),
         return updatedCase;
       });
 
+      // Send approval email to preparer
+      try {
+        await emailService.sendCaseApprovedNotification(
+          { ...caseData, reviewedBy: { firstName: req.user.firstName, lastName: req.user.lastName } },
+          caseData.preparedBy
+        );
+      } catch (emailError) {
+        logger.error('Email notification error:', emailError);
+      }
+
+      logger.info('Case approved', { caseId: updated.id });
+
       res.json({
-        message: 'Case reviewed and approved. Ready for partner finalization.',
+        message: 'Case approved. Ready for partner finalization.',
         case: updated
       });
     } else {
-      // Reject - send back to DRAFT
+      // REJECTED - Back to DRAFT
       const updated = await prisma.$transaction(async (tx) => {
         const updatedCase = await tx.case.update({
           where: { id: req.params.id },
           data: {
             status: 'DRAFT',
-            submittedForReviewAt: null
+            reviewedById: req.userId
           }
         });
 
@@ -296,26 +351,39 @@ router.post('/:id/review', requireManager, auditLogger('CASE_REVIEWED', 'CASE'),
             caseId: req.params.id,
             action: 'REJECTED',
             actionById: req.userId,
-            comments: comments || 'Rejected by reviewer'
+            comments
           }
         });
 
         return updatedCase;
       });
 
+      // Send rejection email to preparer
+      try {
+        await emailService.sendCaseRejectedNotification(
+          { ...caseData, reviewedBy: { firstName: req.user.firstName, lastName: req.user.lastName } },
+          caseData.preparedBy,
+          comments
+        );
+      } catch (emailError) {
+        logger.error('Email notification error:', emailError);
+      }
+
+      logger.info('Case rejected', { caseId: updated.id });
+
       res.json({
-        message: 'Case rejected and sent back to DRAFT',
+        message: 'Case rejected. Returned to DRAFT status.',
         case: updated
       });
     }
   } catch (error) {
-    console.error('Review case error:', error);
+    logger.error('Review case error:', error);
     res.status(500).json({ error: 'Failed to review case' });
   }
 });
 
-// FINALIZE case (Partner only) - IRREVERSIBLE
-router.post('/:id/finalize', requirePartner, auditLogger('CASE_FINALIZED', 'CASE'), async (req, res) => {
+// Finalize case (Partner only) - WITH EMAIL
+router.post('/:id/finalize', requirePartner, caseValidation.finalize, auditLogger('CASE_FINALIZED', 'CASE'), async (req, res) => {
   try {
     const { finalComments } = req.body;
 
@@ -325,6 +393,9 @@ router.post('/:id/finalize', requirePartner, auditLogger('CASE_FINALIZED', 'CASE
         firmId: req.firmId
       },
       include: {
+        client: true,
+        preparedBy: true,
+        reviewedBy: true,
         bundles: {
           include: { files: true }
         }
@@ -335,20 +406,16 @@ router.post('/:id/finalize', requirePartner, auditLogger('CASE_FINALIZED', 'CASE
       return res.status(404).json({ error: 'Case not found' });
     }
 
-    if (caseData.status === 'FINALIZED') {
-      return res.status(400).json({ error: 'Case is already finalized' });
+    if (caseData.status !== 'UNDER_REVIEW') {
+      return res.status(400).json({ error: 'Case must be under review to finalize' });
     }
 
     if (!caseData.reviewedById) {
       return res.status(400).json({ error: 'Case must be reviewed before finalization' });
     }
 
-    if (caseData.bundles.length === 0 || caseData.bundles.every(b => b.files.length === 0)) {
-      return res.status(400).json({ error: 'Cannot finalize case without files' });
-    }
-
-    // FINALIZE - LOCK EVERYTHING
-    const finalized = await prisma.$transaction(async (tx) => {
+    // FINALIZE - IRREVERSIBLE
+    const updated = await prisma.$transaction(async (tx) => {
       // Update case
       const updatedCase = await tx.case.update({
         where: { id: req.params.id },
@@ -362,25 +429,17 @@ router.post('/:id/finalize', requirePartner, auditLogger('CASE_FINALIZED', 'CASE
         }
       });
 
-      // Lock all bundles
+      // Lock all bundles and files
       await tx.caseBundle.updateMany({
         where: { caseId: req.params.id },
-        data: {
-          isFinalized: true,
-          finalizedAt: new Date()
-        }
+        data: { isFinalized: true, finalizedAt: new Date() }
       });
 
-      // Lock all files
-      for (const bundle of caseData.bundles) {
-        await tx.caseFile.updateMany({
-          where: { bundleId: bundle.id },
-          data: {
-            isLocked: true,
-            lockedAt: new Date()
-          }
-        });
-      }
+      const allFileIds = caseData.bundles.flatMap(b => b.files.map(f => f.id));
+      await tx.caseFile.updateMany({
+        where: { id: { in: allFileIds } },
+        data: { isLocked: true, lockedAt: new Date() }
+      });
 
       // Create approval chain entry
       await tx.approvalChain.create({
@@ -392,7 +451,7 @@ router.post('/:id/finalize', requirePartner, auditLogger('CASE_FINALIZED', 'CASE
         }
       });
 
-      // Create firm memory index for search
+      // Create firm memory index
       await tx.firmMemoryIndex.create({
         data: {
           firmId: req.firmId,
@@ -402,7 +461,7 @@ router.post('/:id/finalize', requirePartner, auditLogger('CASE_FINALIZED', 'CASE
           caseType: caseData.caseType,
           fiscalYear: caseData.fiscalYear,
           partnerName: `${req.user.firstName} ${req.user.lastName}`,
-          searchVector: `${caseData.caseName} ${caseData.client.name} ${caseData.caseType} ${caseData.fiscalYear}`,
+          searchVector: `${caseData.caseName} ${caseData.client.name} ${caseData.caseType}`,
           finalizedAt: new Date()
         }
       });
@@ -410,38 +469,40 @@ router.post('/:id/finalize', requirePartner, auditLogger('CASE_FINALIZED', 'CASE
       return updatedCase;
     });
 
+    // Get all team members for notification
+    const team = [caseData.preparedBy];
+    if (caseData.reviewedBy) team.push(caseData.reviewedBy);
+    
+    // Add current user (partner)
+    team.push({
+      firstName: req.user.firstName,
+      lastName: req.user.lastName,
+      email: req.user.email
+    });
+
+    // Send finalization email to team
+    try {
+      await emailService.sendCaseFinalizedNotification(
+        {
+          ...caseData,
+          approvedBy: { firstName: req.user.firstName, lastName: req.user.lastName },
+          finalizedAt: new Date()
+        },
+        team
+      );
+    } catch (emailError) {
+      logger.error('Email notification error:', emailError);
+    }
+
+    logger.info('Case finalized', { caseId: updated.id });
+
     res.json({
       message: '✅ CASE FINALIZED AND LOCKED. This action is irreversible.',
-      case: finalized
+      case: updated
     });
   } catch (error) {
-    console.error('Finalize case error:', error);
+    logger.error('Finalize case error:', error);
     res.status(500).json({ error: 'Failed to finalize case' });
-  }
-});
-
-// Get approval chain for case
-router.get('/:id/approval-chain', async (req, res) => {
-  try {
-    const chain = await prisma.approvalChain.findMany({
-      where: {
-        caseId: req.params.id,
-        case: {
-          firmId: req.firmId
-        }
-      },
-      include: {
-        actionBy: {
-          select: { firstName: true, lastName: true, role: true }
-        }
-      },
-      orderBy: { createdAt: 'asc' }
-    });
-
-    res.json({ approvalChain: chain });
-  } catch (error) {
-    console.error('Get approval chain error:', error);
-    res.status(500).json({ error: 'Failed to fetch approval chain' });
   }
 });
 
