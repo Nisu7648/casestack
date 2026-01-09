@@ -3,16 +3,19 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
+const { authLimiter } = require('../../middleware/rateLimiter.middleware');
+const deviceSessionService = require('../../services/deviceSession.service');
+const { logger } = require('../../utils/logger');
 
 const prisma = new PrismaClient();
 
 // ============================================
 // AUTH & FIRM MANAGEMENT MODULE
-// Firm creation, user roles, license enforcement
+// WITH DEVICE SESSION MANAGEMENT (MAX 3 DEVICES)
 // ============================================
 
 // Register new firm (creates firm + first admin user)
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const {
       // Firm details
@@ -79,7 +82,7 @@ router.post('/register', async (req, res) => {
         }
       });
 
-      // Create firm settings
+      // Create firm settings (with maxDevicesPerUser = 3)
       await tx.firmSettings.create({
         data: {
           firmId: firm.id,
@@ -87,6 +90,7 @@ router.post('/register', async (req, res) => {
           requireTwoApprovers: false,
           enableDownloadTracking: true,
           enableAuditExport: true,
+          maxDevicesPerUser: 3, // NEW: Max 3 devices per user
           autoArchiveAfterYears: 7
         }
       });
@@ -116,18 +120,6 @@ router.post('/register', async (req, res) => {
         }
       });
 
-      // Create audit log
-      await tx.auditLog.create({
-        data: {
-          firmId: firm.id,
-          userId: user.id,
-          action: 'FIRM_CREATED',
-          entityType: 'FIRM',
-          entityId: firm.id,
-          details: { firmName, country }
-        }
-      });
-
       return { firm, user };
     });
 
@@ -141,6 +133,16 @@ router.post('/register', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
+
+    // Create device session
+    try {
+      await deviceSessionService.createSession(result.user.id, token, req);
+    } catch (deviceError) {
+      logger.error('Failed to create device session on registration', deviceError);
+      // Continue anyway - don't block registration
+    }
+
+    logger.info('Firm registered', { firmId: result.firm.id, userId: result.user.id });
 
     res.status(201).json({
       message: 'Firm and admin account created successfully',
@@ -156,13 +158,13 @@ router.post('/register', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    logger.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
-// Login
-router.post('/login', async (req, res) => {
+// Login (with device session management)
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -195,6 +197,45 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        firmId: user.firmId,
+        role: user.role
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    // Create device session (with max 3 devices check)
+    try {
+      await deviceSessionService.createSession(user.id, token, req);
+    } catch (deviceError) {
+      // Device limit exceeded
+      if (deviceError.message.includes('Device limit exceeded')) {
+        logger.warn('Device limit exceeded on login', { userId: user.id, email: user.email });
+        
+        // Get active sessions
+        const sessions = await deviceSessionService.getUserSessions(user.id);
+        
+        return res.status(403).json({
+          error: 'Device limit exceeded',
+          message: deviceError.message,
+          activeSessions: sessions.map(s => ({
+            id: s.id,
+            deviceName: s.deviceName,
+            deviceType: s.deviceType,
+            lastActivityAt: s.lastActivityAt,
+            createdAt: s.createdAt
+          }))
+        });
+      }
+      
+      logger.error('Failed to create device session on login', deviceError);
+      // Continue anyway - don't block login
+    }
+
     // Update last login
     await prisma.user.update({
       where: { id: user.id },
@@ -207,21 +248,14 @@ router.post('/login', async (req, res) => {
         firmId: user.firmId,
         userId: user.id,
         action: 'USER_LOGIN',
-        entityType: 'USER',
-        entityId: user.id
+        resourceType: 'USER',
+        resourceId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
       }
     });
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        firmId: user.firmId,
-        role: user.role
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    logger.info('User logged in', { userId: user.id, email: user.email });
 
     res.json({
       token,
@@ -237,8 +271,141 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Logout (from current device)
+router.post('/logout', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Find and deactivate session
+    const session = await prisma.deviceSession.findUnique({
+      where: { token }
+    });
+
+    if (session) {
+      await deviceSessionService.logoutDevice(decoded.userId, session.id);
+    }
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        firmId: decoded.firmId,
+        userId: decoded.userId,
+        action: 'USER_LOGOUT',
+        resourceType: 'DEVICE',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      }
+    });
+
+    logger.info('User logged out', { userId: decoded.userId });
+
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    logger.error('Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Logout from all devices
+router.post('/logout-all', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Logout from all devices
+    await deviceSessionService.logoutAllDevices(decoded.userId);
+
+    logger.info('User logged out from all devices', { userId: decoded.userId });
+
+    res.json({ message: 'Logged out from all devices successfully' });
+  } catch (error) {
+    logger.error('Logout all error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Get active device sessions
+router.get('/sessions', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Get sessions
+    const sessions = await deviceSessionService.getUserSessions(decoded.userId);
+
+    // Get device limit info
+    const deviceLimit = await deviceSessionService.checkDeviceLimit(decoded.userId);
+
+    res.json({
+      sessions: sessions.map(s => ({
+        id: s.id,
+        deviceName: s.deviceName,
+        deviceType: s.deviceType,
+        browser: s.browser,
+        os: s.os,
+        ipAddress: s.ipAddress,
+        lastActivityAt: s.lastActivityAt,
+        createdAt: s.createdAt,
+        isCurrent: s.token === token
+      })),
+      deviceLimit: {
+        current: deviceLimit.current,
+        max: deviceLimit.max,
+        available: deviceLimit.max - deviceLimit.current
+      }
+    });
+  } catch (error) {
+    logger.error('Get sessions error:', error);
+    res.status(500).json({ error: 'Failed to get sessions' });
+  }
+});
+
+// Remove specific device session
+router.delete('/sessions/:sessionId', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    const { sessionId } = req.params;
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Logout device
+    await deviceSessionService.logoutDevice(decoded.userId, sessionId);
+
+    logger.info('Device session removed', { userId: decoded.userId, sessionId });
+
+    res.json({ message: 'Device session removed successfully' });
+  } catch (error) {
+    logger.error('Remove session error:', error);
+    res.status(500).json({ error: error.message || 'Failed to remove session' });
   }
 });
 
@@ -251,8 +418,10 @@ router.get('/me', async (req, res) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
+    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // Get user
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       include: {
@@ -262,8 +431,8 @@ router.get('/me', async (req, res) => {
       }
     });
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: 'User not found or inactive' });
     }
 
     res.json({
@@ -279,7 +448,7 @@ router.get('/me', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Get user error:', error);
+    logger.error('Get current user error:', error);
     res.status(401).json({ error: 'Invalid token' });
   }
 });
