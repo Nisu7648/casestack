@@ -1,6 +1,7 @@
 // ============================================
 // CASESTACK - FINALIZATION & DEFENSIBILITY SYSTEM
 // Database Schema (Locked Direction)
+// WITH DEVICE SESSION MANAGEMENT (MAX 3 DEVICES)
 // ============================================
 
 generator client {
@@ -55,6 +56,7 @@ model FirmSettings {
   // Security
   enableDownloadTracking Boolean @default(true)
   enableAuditExport      Boolean @default(true)
+  maxDevicesPerUser      Int     @default(3) // NEW: Maximum devices per user
   
   // Archival
   autoArchiveAfterYears Int @default(7)
@@ -90,6 +92,9 @@ model User {
   reviewedCases  Case[] @relation("ReviewedBy")
   approvedCases  Case[] @relation("ApprovedBy")
   
+  // Device Sessions (NEW)
+  deviceSessions DeviceSession[]
+  
   // Logs
   auditLogs      AuditLog[]
   downloadLogs   DownloadLog[]
@@ -101,6 +106,45 @@ model User {
   
   @@index([email])
   @@index([firmId, role])
+}
+
+// ============================================
+// DEVICE SESSION MANAGEMENT (NEW)
+// Maximum 3 active devices per user
+// ============================================
+
+model DeviceSession {
+  id String @id @default(cuid())
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Device Information
+  deviceId          String   // Unique device identifier (generated on first login)
+  deviceName        String?  // "Chrome on Windows", "Safari on iPhone"
+  deviceType        String?  // "desktop", "mobile", "tablet"
+  browser           String?  // "Chrome", "Safari", "Firefox"
+  os                String?  // "Windows", "macOS", "iOS", "Android"
+  
+  // Session Information
+  token             String   @unique // JWT token
+  refreshToken      String?  @unique // For token refresh
+  ipAddress         String?
+  userAgent         String?
+  
+  // Status
+  isActive          Boolean  @default(true)
+  lastActivityAt    DateTime @default(now())
+  expiresAt         DateTime
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId, isActive])
+  @@index([token])
+  @@index([deviceId])
+  @@index([expiresAt])
 }
 
 // ============================================
@@ -250,9 +294,9 @@ model CaseBundle {
   // Files
   files CaseFile[]
   
-  // Bundle Metadata
-  isFinalized Boolean @default(false)
-  finalizedAt DateTime?
+  // Finalization
+  isFinalized  Boolean   @default(false)
+  finalizedAt  DateTime?
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -273,21 +317,21 @@ model CaseFile {
   fileName String
   fileType FileType
   fileSize Int      // bytes
-  fileHash String   // SHA-256 for integrity
+  fileHash String   // SHA-256 for integrity verification
   
   bundleId String
   bundle   CaseBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
   
   // Storage
-  storageUrl  String // S3, Azure Blob, or local path
-  storagePath String
+  storageUrl  String // S3 URL or local path
+  storagePath String // For local storage
   
-  // Metadata
+  // Upload Info
   uploadedById String
   uploadedBy   User   @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
   
-  // Immutability
-  isLocked Boolean @default(false)
+  // Locking
+  isLocked Boolean   @default(false)
   lockedAt DateTime?
   
   createdAt DateTime @default(now())
@@ -297,13 +341,12 @@ model CaseFile {
 }
 
 // ============================================
-// FINALIZATION & APPROVAL MODULE
+// APPROVAL CHAIN MODULE
 // ============================================
 
 enum ApprovalAction {
   SUBMITTED_FOR_REVIEW
   REVIEWED
-  APPROVED
   REJECTED
   FINALIZED
 }
@@ -314,80 +357,51 @@ model ApprovalChain {
   caseId String
   case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
   
-  action     ApprovalAction
-  actionById String
-  actionBy   User           @relation(fields: [actionById], references: [id], onDelete: Restrict)
+  action      ApprovalAction
+  actionById  String
+  actionBy    User           @relation(fields: [actionById], references: [id], onDelete: Restrict)
   
   comments String?
   
-  // Immutable
   createdAt DateTime @default(now())
   
   @@index([caseId])
-  @@index([actionById])
 }
 
 // ============================================
-// FIRM MEMORY & SEARCH MODULE
-// ============================================
-
-model FirmMemoryIndex {
-  id String @id @default(cuid())
-  
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Cascade)
-  
-  // Searchable Fields
-  caseId       String
-  case         Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  
-  clientName   String
-  caseName     String
-  caseType     String
-  fiscalYear   Int
-  partnerName  String
-  
-  // Full-text search
-  searchVector String @db.Text // For PostgreSQL full-text search
-  
-  // Metadata
-  finalizedAt DateTime
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  @@index([firmId, fiscalYear])
-  @@index([clientName])
-  @@index([caseName])
-}
-
-// ============================================
-// AUDIT LOG & TRACEABILITY MODULE
+// AUDIT LOG MODULE (IMMUTABLE)
 // ============================================
 
 enum AuditAction {
-  FIRM_CREATED
+  // Auth
+  USER_LOGIN
+  USER_LOGOUT
   USER_CREATED
   USER_UPDATED
-  USER_LOGIN
-  PASSWORD_CHANGED
-  CLIENT_CREATED
-  CLIENT_UPDATED
+  USER_DEACTIVATED
+  
+  // Device Sessions (NEW)
+  DEVICE_REGISTERED
+  DEVICE_REMOVED
+  DEVICE_LIMIT_EXCEEDED
+  
+  // Cases
   CASE_CREATED
   CASE_UPDATED
+  CASE_VIEWED
   CASE_SUBMITTED
   CASE_REVIEWED
-  CASE_APPROVED
   CASE_FINALIZED
-  CASE_LOCKED
-  BUNDLE_CREATED
+  
+  // Files
   FILE_UPLOADED
   FILE_DOWNLOADED
+  FILE_DELETED
+  BUNDLE_CREATED
   BUNDLE_DOWNLOADED
-  CASE_EXPORTED
+  
+  // Settings
   SETTINGS_UPDATED
-  FIRM_UPDATED
-  LICENSE_UPDATED
 }
 
 model AuditLog {
@@ -400,26 +414,34 @@ model AuditLog {
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
   
   action       AuditAction
-  entityType   String      // "CASE", "FILE", "USER", "FIRM"
-  entityId     String
+  resourceType String      // "CASE", "FILE", "USER", "DEVICE"
+  resourceId   String?
   
-  // Details
-  details      Json?       // Structured data
-  ipAddress    String?
-  userAgent    String?
+  caseId String?
+  case   Case?   @relation(fields: [caseId], references: [id], onDelete: SetNull)
   
-  // Immutable
+  metadata Json? // Additional context
+  
+  ipAddress String?
+  userAgent String?
+  
   createdAt DateTime @default(now())
   
   @@index([firmId, createdAt])
   @@index([userId])
-  @@index([entityType, entityId])
+  @@index([caseId])
   @@index([action])
 }
 
 // ============================================
-// DOWNLOAD TRACKING (DEFENSIBILITY)
+// DOWNLOAD TRACKING MODULE
 // ============================================
+
+enum DownloadType {
+  SINGLE_FILE
+  FULL_BUNDLE
+  CASE_EXPORT
+}
 
 model DownloadLog {
   id String @id @default(cuid())
@@ -430,18 +452,43 @@ model DownloadLog {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
   
-  // What was downloaded
-  downloadType String // "FULL_BUNDLE", "SINGLE_FILE", "AUDIT_EXPORT"
-  fileIds      String[] // Array of file IDs
+  downloadType DownloadType
+  fileIds      String[] // Array of file IDs downloaded
   
-  // Tracking
   ipAddress String?
   userAgent String?
   
-  // Immutable
   createdAt DateTime @default(now())
   
   @@index([caseId])
   @@index([userId])
-  @@index([createdAt])
+}
+
+// ============================================
+// FIRM MEMORY INDEX (SEARCH)
+// ============================================
+
+model FirmMemoryIndex {
+  id String @id @default(cuid())
+  
+  firmId String
+  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  caseId String
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Searchable Fields
+  clientName   String
+  caseName     String
+  caseType     String
+  fiscalYear   Int
+  partnerName  String
+  searchVector String // Full-text search
+  
+  finalizedAt DateTime
+  
+  createdAt DateTime @default(now())
+  
+  @@index([firmId, fiscalYear])
+  @@index([searchVector])
 }
