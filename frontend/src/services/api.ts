@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // ============================================
 // CASESTACK API SERVICE - FULLY INTEGRATED
-// Complete frontend-backend connection
+// WITH DEVICE SESSION MANAGEMENT
 // ============================================
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -29,7 +29,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor - Handle errors
+// Response interceptor - Handle errors and device session issues
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -37,7 +37,20 @@ api.interceptors.response.use(
       // Unauthorized - clear token and redirect to login
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      
+      // Check if it's a device session issue
+      if (error.response?.data?.reason) {
+        const reason = error.response.data.reason;
+        if (reason === 'Session expired' || reason === 'Session invalid') {
+          alert('Your session has expired. Please login again.');
+        }
+      }
+      
       window.location.href = '/login';
+    } else if (error.response?.status === 403 && error.response?.data?.error === 'Device limit exceeded') {
+      // Device limit exceeded - show device management
+      const data = error.response.data;
+      alert(`${data.message}\n\nYou can manage your devices in Account Settings.`);
     }
     return Promise.reject(error);
   }
@@ -62,14 +75,42 @@ export const authAPI = {
     return response.data;
   },
 
-  logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+  logout: async () => {
+    try {
+      await api.post('/api/auth/logout');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+  },
+
+  logoutAll: async () => {
+    try {
+      await api.post('/api/auth/logout-all');
+    } catch (error) {
+      console.error('Logout all error:', error);
+    } finally {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
   },
 
   getCurrentUser: () => {
     const user = localStorage.getItem('user');
     return user ? JSON.parse(user) : null;
+  },
+
+  // NEW: Device session management
+  getSessions: async () => {
+    const response = await api.get('/api/auth/sessions');
+    return response.data;
+  },
+
+  removeSession: async (sessionId) => {
+    const response = await api.delete(`/api/auth/sessions/${sessionId}`);
+    return response.data;
   },
 };
 
