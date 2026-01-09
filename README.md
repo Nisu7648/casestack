@@ -1,6 +1,7 @@
 # 🎯 CASESTACK - Finalization & Defensibility System
 
-**Production-ready case management system for audit, legal, and consulting firms.**
+**Production-ready case management system for audit, legal, and consulting firms.**  
+**WITH DEVICE SESSION MANAGEMENT - Max 3 devices per user** 🔐
 
 ---
 
@@ -29,7 +30,7 @@ chmod +x quickstart.sh
 This will:
 - Install all dependencies
 - Setup environment files
-- Run database migrations
+- Run database migrations (including device sessions)
 - Start backend server (http://localhost:5000)
 - Start frontend server (http://localhost:5173)
 
@@ -43,6 +44,7 @@ See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed instructions.
 
 ### **Backend (100% Complete)**
 - ✅ 8 API modules (40+ endpoints)
+- ✅ **Device session management (max 3 devices per user)** 🔐
 - ✅ File storage (S3 + Local with SHA-256)
 - ✅ Email notifications (SMTP)
 - ✅ PDF export (audit-ready)
@@ -57,6 +59,7 @@ See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed instructions.
 ### **Frontend (100% Complete)**
 - ✅ 9 screens (Login, Dashboard, Cases, Search, Archive, Audit, Admin)
 - ✅ Complete API integration
+- ✅ **Device management UI** 🔐
 - ✅ File upload/download
 - ✅ Authentication & authorization
 - ✅ Protected routes
@@ -66,7 +69,30 @@ See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed instructions.
 - ✅ API Documentation
 - ✅ Deployment Guide
 - ✅ Integration Guide
+- ✅ **Device Session Management Guide** 🔐
 - ✅ Setup Instructions
+
+---
+
+## 🔐 **NEW: DEVICE SESSION MANAGEMENT**
+
+### **Key Features**
+- **Maximum 3 active devices per user**
+- Prevents account sharing
+- Device tracking (name, type, browser, OS, IP)
+- Session management (view, remove devices)
+- Auto-expiry after 7 days
+- Complete audit trail
+
+### **How It Works**
+1. User logs in → Device registered
+2. System checks active device count
+3. If < 3: Login succeeds
+4. If = 3: Login blocked, shows active devices
+5. User can remove old devices to login
+
+### **Documentation**
+See [DEVICE_SESSION_MANAGEMENT.md](DEVICE_SESSION_MANAGEMENT.md) for complete details.
 
 ---
 
@@ -97,6 +123,7 @@ See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed instructions.
 - Immutable audit logs
 - Complete approval chain
 - Download tracking
+- Device session tracking 🔐
 - Export logs as CSV
 - Responsibility chain
 
@@ -104,6 +131,7 @@ See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed instructions.
 - Role-based access (Staff, Manager, Partner, Admin)
 - Multi-tenant architecture
 - User creation & management
+- **Device session management (max 3 devices)** 🔐
 - Firm settings
 
 ---
@@ -115,22 +143,24 @@ casestack/
 ├── backend/
 │   ├── src/
 │   │   ├── routes/          # API endpoints
-│   │   ├── services/        # Business logic
+│   │   ├── services/        # Business logic (+ device sessions)
 │   │   ├── middleware/      # Auth, validation, logging
 │   │   ├── utils/           # Utilities
 │   │   └── server.casestack.js
 │   ├── prisma/
-│   │   └── schema.casestack.prisma
+│   │   ├── schema.casestack.prisma (with DeviceSession)
+│   │   └── migrations/
 │   ├── scripts/             # Backup/restore
 │   └── package.json
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/           # All screens
 │   │   ├── components/      # Reusable components
-│   │   ├── services/        # API integration
+│   │   ├── services/        # API integration (+ device mgmt)
 │   │   └── App.tsx
 │   └── package.json
 ├── INTEGRATION_GUIDE.md     # Setup instructions
+├── DEVICE_SESSION_MANAGEMENT.md  # Device session docs
 ├── API_DOCUMENTATION.md     # API reference
 ├── DEPLOYMENT_GUIDE.md      # Deployment guide
 └── quickstart.sh            # Quick start script
@@ -144,6 +174,7 @@ casestack/
 - Node.js + Express
 - PostgreSQL + Prisma ORM
 - JWT Authentication
+- **Device Session Management** 🔐
 - Winston Logger
 - Nodemailer (Email)
 - PDFKit (PDF generation)
@@ -164,6 +195,7 @@ casestack/
 ## 📚 **DOCUMENTATION**
 
 - **[Integration Guide](INTEGRATION_GUIDE.md)** - Complete setup and testing
+- **[Device Session Management](DEVICE_SESSION_MANAGEMENT.md)** - Max 3 devices feature 🔐
 - **[API Documentation](API_DOCUMENTATION.md)** - All endpoints with examples
 - **[Deployment Guide](DEPLOYMENT_GUIDE.md)** - Production deployment
 - **[Final Summary](FINAL_SUMMARY.md)** - System overview
@@ -189,6 +221,16 @@ curl -X POST http://localhost:5000/api/auth/register \
     "firmName": "Test Firm LLP",
     "country": "INDIA"
   }'
+```
+
+### **Test Device Limit**
+```bash
+# Login from 4th device (should fail)
+curl -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@firm.com","password":"SecurePass123!"}'
+
+# Should return 403 with active sessions
 ```
 
 ### **Complete Workflow Test**
@@ -230,6 +272,7 @@ See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for detailed instructions.
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/casestack
 JWT_SECRET=your-secret-key
+JWT_EXPIRES_IN=7d
 STORAGE_TYPE=local
 SMTP_HOST=smtp.gmail.com
 SMTP_USER=your-email@gmail.com
@@ -253,6 +296,7 @@ VITE_API_URL=http://localhost:5000
 - Advanced search
 - Audit trail
 - User management
+- **Device session management (max 3 devices)** 🔐
 
 ### **Future (v2.0)**
 - Payment gateway integration
@@ -260,7 +304,7 @@ VITE_API_URL=http://localhost:5000
 - Real-time notifications
 - Mobile app
 - Advanced analytics
-- API rate limiting (advanced)
+- Biometric authentication
 - Redis caching
 
 ---
@@ -292,9 +336,10 @@ VITE_API_URL=http://localhost:5000
 
 For issues or questions:
 1. Check [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)
-2. Check [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
-3. Check logs: `tail -f backend/logs/combined.log`
-4. Check database: `npx prisma studio`
+2. Check [DEVICE_SESSION_MANAGEMENT.md](DEVICE_SESSION_MANAGEMENT.md)
+3. Check [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+4. Check logs: `tail -f backend/logs/combined.log`
+5. Check database: `npx prisma studio`
 
 ---
 
@@ -311,14 +356,16 @@ Proprietary - All rights reserved
 **Next steps:**
 1. Run `./quickstart.sh`
 2. Test complete workflow
-3. Deploy to production
-4. Get first customer
-5. Launch! 🚀
+3. Test device session management
+4. Deploy to production
+5. Get first customer
+6. Launch! 🚀
 
 ---
 
 **CASESTACK - Production-Ready Case Management System**  
-**Built with no compromises. Ready to make money.** 💰
+**WITH DEVICE SESSION MANAGEMENT (Max 3 Devices Per User)**  
+**Built with no compromises. Ready to make money.** 💰🔐
 
 **Version:** 1.0.0  
 **Status:** Production-Ready ✅  
