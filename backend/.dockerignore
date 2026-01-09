@@ -1,0 +1,70 @@
+# ============================================
+# CASESTACK - DOCKER IGNORE
+# Files to exclude from Docker build context
+# ============================================
+
+# Node modules
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.*
+!.env.docker
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads
+uploads/
+temp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+test/
+tests/
+*.test.js
+*.spec.js
+coverage/
+
+# Build artifacts
+dist/
+build/
+.next/
+out/
+
+# Prisma
+prisma/migrations/
+!prisma/schema.casestack.prisma
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
