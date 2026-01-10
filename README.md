@@ -1,387 +1,152 @@
-# 🎯 CASESTACK - Finalization & Defensibility System
+# CASESTACK
 
-**Production-ready case management system for audit, legal, and consulting firms.**  
-**WITH DEVICE SESSION MANAGEMENT - Max 3 devices per user** 🔐
-
----
-
-## 🚀 **ONE-CLICK DEPLOY (100% FREE)**
-
-### **Deploy Backend to Render.com:**
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Nisu7648/casestack)
-
-### **Deploy Frontend to Vercel:**
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Nisu7648/casestack/tree/main/frontend&env=VITE_API_URL&envDescription=Backend%20API%20URL&envLink=https://github.com/Nisu7648/casestack/blob/main/FREE_DEPLOYMENT_GUIDE.md)
-
-**📖 Detailed Guide:** [FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)
+**Professional case management system for audit, legal, and consulting firms.**
 
 ---
 
-## ✅ **SYSTEM STATUS: 100% COMPLETE & INTEGRATED**
+## 🚀 QUICK START
 
-All services, screens, and features are fully connected and working together.
-
----
-
-## 🚀 **QUICK START (LOCAL)**
-
-### **Automated Setup (Recommended)**
-
+### Docker (Recommended)
 ```bash
-# Clone repository
 git clone https://github.com/Nisu7648/casestack.git
 cd casestack
+cp .env.docker .env
+docker-compose up -d
+```
 
-# Make script executable
+Open: http://localhost:8080
+
+### Manual Setup
+```bash
+git clone https://github.com/Nisu7648/casestack.git
+cd casestack
 chmod +x quickstart.sh
-
-# Run quick start
 ./quickstart.sh
 ```
 
-This will:
-- Install all dependencies
-- Setup environment files
-- Run database migrations (including device sessions)
-- Start backend server (http://localhost:5000)
-- Start frontend server (http://localhost:5173)
-
-### **Manual Setup**
-
-See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed instructions.
+Open: http://localhost:5173
 
 ---
 
-## 📊 **WHAT'S INCLUDED**
+## 📦 WHAT'S INCLUDED
 
-### **Backend (100% Complete)**
-- ✅ 8 API modules (40+ endpoints)
-- ✅ **Device session management (max 3 devices per user)** 🔐
-- ✅ File storage (S3 + Local with SHA-256)
-- ✅ Email notifications (SMTP)
-- ✅ PDF export (audit-ready)
-- ✅ Advanced search (full-text)
-- ✅ Production-grade logging (Winston)
-- ✅ Input validation (express-validator)
-- ✅ Rate limiting (API protection)
-- ✅ Error handling (production-grade)
-- ✅ Health checks (monitoring)
-- ✅ Database backup scripts
-
-### **Frontend (100% Complete)**
-- ✅ 9 screens (Login, Dashboard, Cases, Search, Archive, Audit, Admin)
-- ✅ Complete API integration
-- ✅ **Device management UI** 🔐
-- ✅ File upload/download
-- ✅ Authentication & authorization
-- ✅ Protected routes
-- ✅ Role-based UI
-
-### **Documentation (100% Complete)**
-- ✅ API Documentation
-- ✅ Deployment Guide
-- ✅ **Free Deployment Guide** 🆓
-- ✅ Integration Guide
-- ✅ **Device Session Management Guide** 🔐
-- ✅ Setup Instructions
+- **Backend:** Node.js + Express + PostgreSQL
+- **Frontend:** React + TypeScript + Vite
+- **Features:** Case management, file upload, audit trail, device sessions
+- **Theme:** Professional black/white modes only
 
 ---
 
-## 🔐 **NEW: DEVICE SESSION MANAGEMENT**
+## 🎨 DESIGN
 
-### **Key Features**
-- **Maximum 3 active devices per user**
-- Prevents account sharing
-- Device tracking (name, type, browser, OS, IP)
-- Session management (view, remove devices)
-- Auto-expiry after 7 days
-- Complete audit trail
-
-### **How It Works**
-1. User logs in → Device registered
-2. System checks active device count
-3. If < 3: Login succeeds
-4. If = 3: Login blocked, shows active devices
-5. User can remove old devices to login
-
-### **Documentation**
-See [DEVICE_SESSION_MANAGEMENT.md](DEVICE_SESSION_MANAGEMENT.md) for complete details.
+- **Black Mode** (default) - Pure black background, white text
+- **White Mode** - Pure white background, black text
+- **No fancy colors** - Professional and minimal
+- **Toggle:** Sun/moon icon in top-right corner
 
 ---
 
-## 🎯 **CORE FEATURES**
-
-### **1. Case Finalization Workflow**
-- Create cases (DRAFT)
-- Submit for review (UNDER_REVIEW)
-- Manager review (Approve/Reject)
-- Partner finalization (FINALIZED & LOCKED)
-- Email notifications at each step
-
-### **2. File Management**
-- Upload files to bundles
-- SHA-256 integrity verification
-- Download single files or full bundles
-- Export audit-ready PDF with all files
-- S3 or local storage support
-
-### **3. Search & Archive**
-- Full-text search across cases
-- Advanced filters (fiscal year, type, status, date)
-- Autocomplete suggestions
-- Firm memory index
-- Archive of finalized cases
-
-### **4. Audit Trail**
-- Immutable audit logs
-- Complete approval chain
-- Download tracking
-- Device session tracking 🔐
-- Export logs as CSV
-- Responsibility chain
-
-### **5. User Management**
-- Role-based access (Staff, Manager, Partner, Admin)
-- Multi-tenant architecture
-- User creation & management
-- **Device session management (max 3 devices)** 🔐
-- Firm settings
-
----
-
-## 📁 **PROJECT STRUCTURE**
+## 📁 STRUCTURE
 
 ```
 casestack/
-├── backend/
-│   ├── src/
-│   │   ├── routes/          # API endpoints
-│   │   ├── services/        # Business logic (+ device sessions)
-│   │   ├── middleware/      # Auth, validation, logging
-│   │   ├── utils/           # Utilities
-│   │   └── server.casestack.js
-│   ├── prisma/
-│   │   ├── schema.casestack.prisma (with DeviceSession)
-│   │   └── migrations/
-│   ├── scripts/             # Backup/restore
-│   ├── render.json          # Render.com config
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── pages/           # All screens
-│   │   ├── components/      # Reusable components
-│   │   ├── services/        # API integration (+ device mgmt)
-│   │   └── App.tsx
-│   ├── vercel.json          # Vercel config
-│   └── package.json
-├── INTEGRATION_GUIDE.md     # Setup instructions
-├── FREE_DEPLOYMENT_GUIDE.md # Free hosting guide
-├── DEVICE_SESSION_MANAGEMENT.md  # Device session docs
-├── API_DOCUMENTATION.md     # API reference
-├── DEPLOYMENT_GUIDE.md      # Deployment guide
-└── quickstart.sh            # Quick start script
+├── backend/          # API server
+├── frontend/         # React app
+├── docker-compose.yml
+├── quickstart.sh
+└── README.md
 ```
 
 ---
 
-## 🔧 **TECHNOLOGY STACK**
+## 🔧 CONFIGURATION
 
-### **Backend**
-- Node.js + Express
-- PostgreSQL + Prisma ORM
-- JWT Authentication
-- **Device Session Management** 🔐
-- Winston Logger
-- Nodemailer (Email)
-- PDFKit (PDF generation)
-- AWS S3 (File storage)
-- Express-validator
-- Express-rate-limit
-- Helmet (Security)
-
-### **Frontend**
-- React + TypeScript
-- Vite
-- Axios
-- React Router
-- Tailwind CSS (optional)
-
----
-
-## 📚 **DOCUMENTATION**
-
-- **[Free Deployment Guide](FREE_DEPLOYMENT_GUIDE.md)** - Deploy for FREE in 15 minutes 🆓
-- **[Integration Guide](INTEGRATION_GUIDE.md)** - Complete setup and testing
-- **[Device Session Management](DEVICE_SESSION_MANAGEMENT.md)** - Max 3 devices feature 🔐
-- **[API Documentation](API_DOCUMENTATION.md)** - All endpoints with examples
-- **[Deployment Guide](DEPLOYMENT_GUIDE.md)** - Production deployment
-- **[Final Summary](FINAL_SUMMARY.md)** - System overview
-
----
-
-## 🧪 **TESTING**
-
-### **Health Check**
-```bash
-curl http://localhost:5000/health
-```
-
-### **Register Firm**
-```bash
-curl -X POST http://localhost:5000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@firm.com",
-    "password": "SecurePass123!",
-    "firstName": "John",
-    "lastName": "Doe",
-    "firmName": "Test Firm LLP",
-    "country": "INDIA"
-  }'
-```
-
-### **Test Device Limit**
-```bash
-# Login from 4th device (should fail)
-curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@firm.com","password":"SecurePass123!"}'
-
-# Should return 403 with active sessions
-```
-
-### **Complete Workflow Test**
-See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for complete workflow testing.
-
----
-
-## 🚀 **DEPLOYMENT OPTIONS**
-
-### **Option 1: Free Hosting (Recommended for Testing)** 🆓
-- **Backend:** Render.com (Free tier)
-- **Database:** Render PostgreSQL (Free 90 days)
-- **Frontend:** Vercel (Free forever)
-- **Total Cost:** $0/month
-- **Guide:** [FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)
-
-### **Option 2: Production Hosting** 💰
-- **Backend:** Render.com ($7/month)
-- **Database:** Render PostgreSQL ($7/month)
-- **Frontend:** Vercel (Free)
-- **Total Cost:** $14/month
-- **Guide:** [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
-
-### **Option 3: Self-Hosted**
-- Docker Compose
-- Your own server
-- Full control
-- **Guide:** [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
-
----
-
-## 🔐 **ENVIRONMENT VARIABLES**
-
-### **Backend (.env)**
+### Backend (.env)
 ```env
 DATABASE_URL=postgresql://user:password@localhost:5432/casestack
 JWT_SECRET=your-secret-key
-JWT_EXPIRES_IN=7d
 STORAGE_TYPE=local
-SMTP_HOST=smtp.gmail.com
-SMTP_USER=your-email@gmail.com
-SMTP_PASSWORD=your-app-password
 ```
 
-### **Frontend (.env)**
+### Frontend (.env)
 ```env
 VITE_API_URL=http://localhost:5000
 ```
 
 ---
 
-## 📈 **FEATURES ROADMAP**
+## 📚 DOCUMENTATION
 
-### **Current (v1.0) - ✅ COMPLETE**
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Production deployment
+- **[FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)** - Free hosting (Render + Vercel)
+- **[DOCKER_DEPLOYMENT_GUIDE.md](DOCKER_DEPLOYMENT_GUIDE.md)** - Docker setup
+- **[DOCKER_QUICK_START.md](DOCKER_QUICK_START.md)** - 3-command Docker start
+- **[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)** - Manual setup guide
+- **[DEVICE_SESSION_MANAGEMENT.md](DEVICE_SESSION_MANAGEMENT.md)** - Device session feature
+
+---
+
+## ✅ FEATURES
+
 - Case finalization workflow
-- File upload/download
-- Email notifications
-- PDF export
+- File upload/download with SHA-256 verification
 - Advanced search
 - Audit trail
 - User management
-- **Device session management (max 3 devices)** 🔐
-
-### **Future (v2.0)**
-- Payment gateway integration
-- Subscription management
-- Real-time notifications
-- Mobile app
-- Advanced analytics
-- Biometric authentication
-- Redis caching
+- Device session management (max 3 devices)
+- Email notifications
+- PDF export
+- Role-based access
 
 ---
 
-## 💰 **BUSINESS MODEL**
+## 🚀 DEPLOYMENT OPTIONS
 
-**SaaS Subscription:**
-- ₹1,399/user/month
-- Multi-tenant architecture
-- Recurring revenue
-- 95%+ profit margin at scale
+### 1. Free Hosting (Render + Vercel)
+- Backend: Render.com (free tier)
+- Frontend: Vercel (free)
+- Cost: $0/month
+- Guide: [FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)
 
-**Target Market:**
-- Mid-sized audit firms (50-200 employees)
-- Legal consulting firms
-- Financial advisory firms
+### 2. Docker (VPS)
+- DigitalOcean, Linode, Vultr
+- Cost: $5-20/month
+- Guide: [DOCKER_DEPLOYMENT_GUIDE.md](DOCKER_DEPLOYMENT_GUIDE.md)
 
----
-
-## 🎯 **SUCCESS CONDITION**
-
-> "A partner can finalize a case, export it, and defend it without calling any employee."
-
-**✅ ACHIEVED**
+### 3. Local Development
+- Run on your machine
+- Cost: $0
+- Guide: [DOCKER_QUICK_START.md](DOCKER_QUICK_START.md)
 
 ---
 
-## 📞 **SUPPORT**
+## 💻 TECH STACK
 
-For issues or questions:
-1. Check [FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)
-2. Check [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)
-3. Check [DEVICE_SESSION_MANAGEMENT.md](DEVICE_SESSION_MANAGEMENT.md)
-4. Check [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
-5. Check logs: `tail -f backend/logs/combined.log`
-6. Check database: `npx prisma studio`
+**Backend:**
+- Node.js + Express
+- PostgreSQL + Prisma ORM
+- JWT Authentication
+- Winston Logger
+- Nodemailer
+- PDFKit
 
----
-
-## 📄 **LICENSE**
-
-Proprietary - All rights reserved
-
----
-
-## 🎉 **READY TO DEPLOY**
-
-**Everything is complete, integrated, and working.**
-
-**Next steps:**
-1. Click "Deploy to Render" button above 👆
-2. Click "Deploy to Vercel" button above 👆
-3. Or run `./quickstart.sh` for local testing
-4. Test complete workflow
-5. Test device session management
-6. Get first customer
-7. Launch! 🚀
+**Frontend:**
+- React + TypeScript
+- Vite
+- React Router
+- Axios
+- Professional black/white theme
 
 ---
 
-**CASESTACK - Production-Ready Case Management System**  
-**WITH DEVICE SESSION MANAGEMENT (Max 3 Devices Per User)**  
-**Built with no compromises. Ready to make money.** 💰🔐
+## 📞 SUPPORT
 
-**Version:** 1.0.0  
-**Status:** Production-Ready ✅  
-**Last Updated:** 2024-01-09
+For issues:
+1. Check documentation in repo
+2. Check logs: `docker-compose logs -f`
+3. Check health: `curl http://localhost:5000/health`
+
+---
+
+**CASESTACK - Professional Case Management**  
+**Production-ready. Deploy in minutes.**
