@@ -1,6 +1,7 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import ThemeToggle from './components/ThemeToggle';
 
 // Auth
 import Login from './pages/casestack/Login';
@@ -16,7 +17,7 @@ import Admin from './pages/casestack/Admin';
 
 // ============================================
 // CASESTACK APP
-// Complete routing configuration
+// Professional Black & White Theme
 // ============================================
 
 // Protected Route Component
@@ -32,7 +33,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <BrowserRouter>
+    <>
+      <ThemeToggle />
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
@@ -84,7 +86,7 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </BrowserRouter>
+    </>
   );
 }
 
