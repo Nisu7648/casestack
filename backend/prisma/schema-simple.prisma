@@ -1,0 +1,59 @@
+// ============================================
+// SIMPLE CASESTACK SCHEMA
+// Minimal schema for auth and firm management
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER MODEL
+// ============================================
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  role          String    @default("OWNER")
+  firmId        String?
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
+  googleId      String?   @unique
+  avatar        String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  firm          Firm?     @relation(fields: [firmId], references: [id])
+
+  @@index([email])
+  @@index([firmId])
+}
+
+// ============================================
+// FIRM MODEL
+// ============================================
+model Firm {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  email     String?
+  phone     String?
+  address   String?
+  website   String?
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+
+  @@index([code])
+  @@index([ownerId])
+}
