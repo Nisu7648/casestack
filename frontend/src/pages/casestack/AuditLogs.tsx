@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Filter } from 'lucide-react';
+import { Clock, Filter, Download } from 'lucide-react';
+import { LoadingTable } from '../../components/ui/LoadingState';
+import { EmptyAuditLogs } from '../../components/ui/EmptyState';
+import { showError } from '../../components/ui/Toast';
+import { ExportButtons } from '../../components/ExportButtons';
 
 // ============================================
-// 8️⃣ AUDIT LOG SCREEN
-// Partners love this screen
+// IMPROVED AUDIT LOGS PAGE
+// Better UI, filters, loading, export
 // ============================================
 
 export default function AuditLogs() {
@@ -12,238 +16,250 @@ export default function AuditLogs() {
   const [filters, setFilters] = useState({
     action: '',
     entityType: '',
-    startDate: '',
-    endDate: ''
+    userId: '',
+    dateFrom: '',
+    dateTo: ''
   });
-  const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 0 });
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     loadLogs();
-  }, [filters, pagination.page]);
+  }, [filters]);
 
   const loadLogs = async () => {
+    setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const params = new URLSearchParams();
       
       if (filters.action) params.append('action', filters.action);
       if (filters.entityType) params.append('entityType', filters.entityType);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
-      params.append('page', pagination.page.toString());
-      params.append('limit', '50');
+      if (filters.userId) params.append('userId', filters.userId);
+      if (filters.dateFrom) params.append('startDate', filters.dateFrom);
+      if (filters.dateTo) params.append('endDate', filters.dateTo);
 
       const response = await fetch(`/api/audit?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+
+      if (!response.ok) throw new Error('Failed to load logs');
+
       const data = await response.json();
-      
       setLogs(data.logs);
-      setPagination(data.pagination);
     } catch (error) {
       console.error('Load logs error:', error);
+      showError('Failed to load audit logs');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const params = new URLSearchParams();
-      
-      if (filters.action) params.append('action', filters.action);
-      if (filters.entityType) params.append('entityType', filters.entityType);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
+  const clearFilters = () => {
+    setFilters({
+      action: '',
+      entityType: '',
+      userId: '',
+      dateFrom: '',
+      dateTo: ''
+    });
+  };
 
-      const response = await fetch(`/api/audit/export?${params}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `casestack-audit-${Date.now()}.csv`;
-      a.click();
-    } catch (error) {
-      console.error('Export error:', error);
-      alert('Export failed');
-    }
+  const hasActiveFilters = Object.values(filters).some(v => v);
+
+  const getActionColor = (action: string) => {
+    if (action.includes('CREATED')) return 'text-green-600';
+    if (action.includes('DELETED')) return 'text-red-600';
+    if (action.includes('UPDATED')) return 'text-blue-600';
+    if (action.includes('FINALIZED')) return 'text-purple-600';
+    return 'text-gray-600';
   };
 
   return (
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Audit Logs</h1>
             <p className="text-sm text-gray-600 mt-1">
-              Complete audit trail • Immutable • Cannot be deleted
+              {loading ? 'Loading...' : `${logs.length} log${logs.length !== 1 ? 's' : ''}`}
             </p>
           </div>
-          <button
-            onClick={handleExport}
-            className="px-4 py-2 bg-gray-800 text-white hover:bg-gray-900 text-sm font-medium flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
+          <ExportButtons type="audit-logs" filters={filters} />
         </div>
 
         {/* Filters */}
-        <div className="bg-white border border-gray-300 p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Filter className="w-4 h-4 text-gray-600" />
-            <span className="text-xs font-medium text-gray-700">FILTERS</span>
-          </div>
-          <div className="grid grid-cols-4 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Action</label>
-              <select
-                value={filters.action}
-                onChange={(e) => setFilters({ ...filters, action: e.target.value })}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:border-gray-500"
+        <div className="mb-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 text-sm hover:bg-gray-50 transition-colors"
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+              {hasActiveFilters && (
+                <span className="ml-1 px-1.5 py-0.5 bg-black text-white text-xs rounded-full">
+                  {Object.values(filters).filter(Boolean).length}
+                </span>
+              )}
+            </button>
+
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="text-sm text-blue-600 hover:underline"
               >
-                <option value="">All Actions</option>
-                <option value="CASE_CREATED">Case Created</option>
-                <option value="CASE_SUBMITTED">Case Submitted</option>
-                <option value="CASE_REVIEWED">Case Reviewed</option>
-                <option value="CASE_FINALIZED">Case Finalized</option>
-                <option value="FILE_UPLOADED">File Uploaded</option>
-                <option value="FILE_DOWNLOADED">File Downloaded</option>
-                <option value="USER_LOGIN">User Login</option>
-                <option value="USER_CREATED">User Created</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Entity Type</label>
-              <select
-                value={filters.entityType}
-                onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:border-gray-500"
-              >
-                <option value="">All Types</option>
-                <option value="CASE">Case</option>
-                <option value="FILE">File</option>
-                <option value="USER">User</option>
-                <option value="FIRM">Firm</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Start Date</label>
-              <input
-                type="date"
-                value={filters.startDate}
-                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:border-gray-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">End Date</label>
-              <input
-                type="date"
-                value={filters.endDate}
-                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:border-gray-500"
-              />
-            </div>
+                Clear all filters
+              </button>
+            )}
           </div>
+
+          {showFilters && (
+            <div className="bg-gray-50 border border-gray-300 p-4 grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Action
+                </label>
+                <select
+                  value={filters.action}
+                  onChange={(e) => setFilters({ ...filters, action: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                >
+                  <option value="">All Actions</option>
+                  <option value="CASE_CREATED">Case Created</option>
+                  <option value="CASE_UPDATED">Case Updated</option>
+                  <option value="CASE_FINALIZED">Case Finalized</option>
+                  <option value="FILE_UPLOADED">File Uploaded</option>
+                  <option value="FILE_DOWNLOADED">File Downloaded</option>
+                  <option value="USER_LOGIN">User Login</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Entity Type
+                </label>
+                <select
+                  value={filters.entityType}
+                  onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                >
+                  <option value="">All Types</option>
+                  <option value="CASE">Case</option>
+                  <option value="FILE">File</option>
+                  <option value="USER">User</option>
+                  <option value="BUNDLE">Bundle</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Date From
+                </label>
+                <input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Date To
+                </label>
+                <input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Logs Table */}
-        <div className="bg-white border border-gray-300">
-          <div className="px-4 py-3 border-b border-gray-300">
-            <h2 className="text-sm font-bold text-gray-900">AUDIT TRAIL</h2>
-            <p className="text-xs text-gray-600 mt-1">
-              {pagination.total} total logs • Page {pagination.page} of {pagination.pages}
-            </p>
-          </div>
+        {loading ? (
+          <LoadingTable rows={15} />
+        ) : logs.length === 0 ? (
+          <EmptyAuditLogs />
+        ) : (
+          <div className="bg-white border border-gray-300">
+            {/* Table Header */}
+            <div className="border-b border-gray-300 bg-gray-50">
+              <div className="grid grid-cols-12 gap-4 p-4 text-xs font-semibold text-gray-700">
+                <div className="col-span-3">TIMESTAMP</div>
+                <div className="col-span-2">USER</div>
+                <div className="col-span-3">ACTION</div>
+                <div className="col-span-2">ENTITY</div>
+                <div className="col-span-2">IP ADDRESS</div>
+              </div>
+            </div>
 
-          {loading ? (
-            <div className="p-8 text-center text-sm text-gray-600">Loading logs...</div>
-          ) : logs.length === 0 ? (
-            <div className="p-8 text-center text-sm text-gray-600">No logs found</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-300">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">TIMESTAMP</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">USER</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">ROLE</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">ACTION</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">ENTITY TYPE</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">ENTITY ID</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">IP ADDRESS</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {logs.map((log) => (
-                    <tr key={log.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {new Date(log.createdAt).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {log.user.firstName} {log.user.lastName}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        {log.user.role}
-                      </td>
-                      <td className="px-4 py-2 text-sm font-medium text-gray-900">
-                        {log.action}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        {log.entityType}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600 font-mono">
+            {/* Table Body */}
+            <div className="divide-y divide-gray-200 max-h-[600px] overflow-y-auto">
+              {logs.map((log: any) => (
+                <div
+                  key={log.id}
+                  className="grid grid-cols-12 gap-4 p-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="col-span-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-gray-400" />
+                      <div>
+                        <p className="text-sm text-gray-900">
+                          {new Date(log.timestamp).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-span-2">
+                    <p className="text-sm text-gray-900">
+                      {log.user.firstName} {log.user.lastName}
+                    </p>
+                    <p className="text-xs text-gray-500">{log.user.role}</p>
+                  </div>
+
+                  <div className="col-span-3">
+                    <p className={`text-sm font-medium ${getActionColor(log.action)}`}>
+                      {log.action}
+                    </p>
+                    {log.details && (
+                      <p className="text-xs text-gray-500 mt-1">{log.details}</p>
+                    )}
+                  </div>
+
+                  <div className="col-span-2">
+                    <p className="text-sm text-gray-900">{log.entityType}</p>
+                    {log.entityId && (
+                      <p className="text-xs text-gray-500 font-mono">
                         {log.entityId.substring(0, 8)}...
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">
-                        {log.ipAddress || '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                      </p>
+                    )}
+                  </div>
 
-          {/* Pagination */}
-          {pagination.pages > 1 && (
-            <div className="px-4 py-3 border-t border-gray-300 flex items-center justify-between">
-              <button
-                onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
-                disabled={pagination.page === 1}
-                className="px-3 py-1.5 text-sm border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-600">
-                Page {pagination.page} of {pagination.pages}
-              </span>
-              <button
-                onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
-                disabled={pagination.page === pagination.pages}
-                className="px-3 py-1.5 text-sm border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
+                  <div className="col-span-2">
+                    <p className="text-sm text-gray-900 font-mono">
+                      {log.ipAddress || '-'}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
 
-        {/* Notice */}
-        <div className="mt-4 p-3 bg-gray-50 border border-gray-300">
-          <p className="text-xs text-gray-600">
-            Audit logs are immutable and cannot be deleted. Every action is tracked permanently.
-          </p>
-        </div>
+            {/* Table Footer */}
+            <div className="border-t border-gray-300 bg-gray-50 p-4">
+              <p className="text-xs text-gray-600 text-center">
+                Showing {logs.length} log{logs.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
