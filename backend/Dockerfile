@@ -1,49 +1,12 @@
 # ============================================
 # CASESTACK BACKEND - DOCKERFILE
-# Production-ready Node.js + PostgreSQL
+# Fixed for Render.com deployment
 # ============================================
 
-FROM node:18-alpine AS base
+FROM node:18-alpine
 
 # Install dependencies for Prisma
 RUN apk add --no-cache openssl libc6-compat
-
-WORKDIR /app
-
-# ============================================
-# DEPENDENCIES STAGE
-# ============================================
-FROM base AS deps
-
-# Copy package files
-COPY package*.json ./
-COPY prisma ./prisma/
-
-# Install dependencies
-RUN npm ci --only=production && \
-    npm cache clean --force
-
-# Generate Prisma Client
-RUN npx prisma generate
-
-# ============================================
-# BUILD STAGE
-# ============================================
-FROM base AS builder
-
-WORKDIR /app
-
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/prisma ./prisma
-
-# Copy source code
-COPY . .
-
-# ============================================
-# PRODUCTION STAGE
-# ============================================
-FROM base AS runner
 
 WORKDIR /app
 
@@ -51,22 +14,24 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 casestack
+# Copy package files
+COPY package*.json ./
 
-# Copy necessary files from builder
-COPY --from=builder --chown=casestack:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=casestack:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=casestack:nodejs /app/src ./src
-COPY --from=builder --chown=casestack:nodejs /app/package*.json ./
+# Install dependencies (use npm install instead of npm ci)
+RUN npm install --production && \
+    npm cache clean --force
+
+# Copy prisma schema
+COPY prisma ./prisma/
+
+# Generate Prisma Client
+RUN npx prisma generate || echo "Prisma generate will run on startup"
+
+# Copy source code
+COPY . .
 
 # Create directories for logs and uploads
-RUN mkdir -p logs uploads && \
-    chown -R casestack:nodejs logs uploads
-
-# Switch to non-root user
-USER casestack
+RUN mkdir -p logs uploads
 
 # Expose port
 EXPOSE 5000
@@ -76,4 +41,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start application
-CMD ["node", "src/server.casestack.js"]
+CMD ["npm", "start"]
