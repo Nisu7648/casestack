@@ -1,87 +1,84 @@
 import React, { useState } from 'react';
-import { Search as SearchIcon, Filter, Download } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Search as SearchIcon, Filter } from 'lucide-react';
+import { LoadingTable } from '../../components/ui/LoadingState';
+import { EmptySearchResults } from '../../components/ui/EmptyState';
+import { showError, showSuccess } from '../../components/ui/Toast';
+import { ExportButtons } from '../../components/ExportButtons';
 
 // ============================================
-// 5️⃣ SEARCH & FIRM MEMORY SCREEN
-// Fast, boring, institutional memory
+// IMPROVED SEARCH PAGE
+// Better UI, loading states, export
 // ============================================
 
 export default function Search() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState({
+  const [searchParams, setSearchParams] = useState({
+    caseNumber: '',
     clientName: '',
-    caseType: '',
     fiscalYear: '',
-    partnerName: ''
+    caseType: '',
+    status: '',
+    preparedBy: '',
+    dateFrom: '',
+    dateTo: ''
   });
   const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
 
   const handleSearch = async () => {
-    if (!searchQuery.trim() && !filters.clientName && !filters.caseType && !filters.fiscalYear && !filters.partnerName) {
-      alert('Please enter a search query or filter');
-      return;
-    }
-
-    setLoading(true);
+    setSearching(true);
     setSearched(true);
-
     try {
       const token = localStorage.getItem('token');
+      const params = new URLSearchParams();
       
-      // Use advanced search if filters are set
-      if (filters.clientName || filters.caseType || filters.fiscalYear || filters.partnerName) {
-        const response = await fetch('/api/search/advanced', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            caseName: searchQuery,
-            ...filters
-          })
-        });
-        const data = await response.json();
-        setResults(data.results || []);
-      } else {
-        // Simple search
-        const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await response.json();
-        setResults(data.results || []);
-      }
+      Object.entries(searchParams).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+
+      const response = await fetch(`/api/search/advanced?${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) throw new Error('Search failed');
+
+      const data = await response.json();
+      setResults(data.results);
+      showSuccess(`Found ${data.results.length} result${data.results.length !== 1 ? 's' : ''}`);
     } catch (error) {
       console.error('Search error:', error);
-      alert('Search failed');
+      showError('Search failed');
     } finally {
-      setLoading(false);
+      setSearching(false);
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/search/export', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ filters })
-      });
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `casestack-search-${Date.now()}.csv`;
-      a.click();
-    } catch (error) {
-      console.error('Export error:', error);
-      alert('Export failed');
+  const clearSearch = () => {
+    setSearchParams({
+      caseNumber: '',
+      clientName: '',
+      fiscalYear: '',
+      caseType: '',
+      status: '',
+      preparedBy: '',
+      dateFrom: '',
+      dateTo: ''
+    });
+    setResults([]);
+    setSearched(false);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'FINALIZED':
+        return 'bg-green-100 text-green-800';
+      case 'UNDER_REVIEW':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'DRAFT':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-blue-100 text-blue-800';
     }
   };
 
@@ -89,167 +86,204 @@ export default function Search() {
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Search Cases</h1>
-          <p className="text-sm text-gray-600 mt-1">Search across all finalized cases. Even ex-employees' cases remain visible.</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Advanced Search</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Search cases by multiple criteria
+            </p>
+          </div>
+          {results.length > 0 && (
+            <ExportButtons type="cases" filters={searchParams} />
+          )}
         </div>
 
-        {/* Search Box */}
-        <div className="bg-white border border-gray-300 p-6 mb-4">
-          <div className="flex gap-3 mb-4">
-            <div className="flex-1 relative">
-              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+        {/* Search Form */}
+        <div className="bg-white border border-gray-300 p-6 mb-6">
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Case Number
+              </label>
               <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full pl-11 pr-4 py-2.5 border border-gray-300 focus:outline-none focus:border-gray-500 text-sm"
-                placeholder="Search by case name, client name, case number..."
+                value={searchParams.caseNumber}
+                onChange={(e) => setSearchParams({ ...searchParams, caseNumber: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                placeholder="e.g., TAX-2024-001"
               />
             </div>
-            <button
-              onClick={handleSearch}
-              disabled={loading}
-              className="px-6 py-2.5 bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50 text-sm font-medium"
-            >
-              {loading ? 'Searching...' : 'Search'}
-            </button>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Client Name
+              </label>
+              <input
+                type="text"
+                value={searchParams.clientName}
+                onChange={(e) => setSearchParams({ ...searchParams, clientName: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                placeholder="e.g., ABC Corp"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Fiscal Year
+              </label>
+              <select
+                value={searchParams.fiscalYear}
+                onChange={(e) => setSearchParams({ ...searchParams, fiscalYear: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              >
+                <option value="">All Years</option>
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Case Type
+              </label>
+              <select
+                value={searchParams.caseType}
+                onChange={(e) => setSearchParams({ ...searchParams, caseType: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              >
+                <option value="">All Types</option>
+                <option value="TAX_AUDIT">Tax Audit</option>
+                <option value="FINANCIAL_AUDIT">Financial Audit</option>
+                <option value="COMPLIANCE">Compliance</option>
+                <option value="ADVISORY">Advisory</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Status
+              </label>
+              <select
+                value={searchParams.status}
+                onChange={(e) => setSearchParams({ ...searchParams, status: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              >
+                <option value="">All Statuses</option>
+                <option value="DRAFT">Draft</option>
+                <option value="UNDER_REVIEW">Under Review</option>
+                <option value="FINALIZED">Finalized</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Prepared By
+              </label>
+              <input
+                type="text"
+                value={searchParams.preparedBy}
+                onChange={(e) => setSearchParams({ ...searchParams, preparedBy: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                placeholder="User name"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Date From
+              </label>
+              <input
+                type="date"
+                value={searchParams.dateFrom}
+                onChange={(e) => setSearchParams({ ...searchParams, dateFrom: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Date To
+              </label>
+              <input
+                type="date"
+                value={searchParams.dateTo}
+                onChange={(e) => setSearchParams({ ...searchParams, dateTo: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              />
+            </div>
           </div>
 
-          {/* Advanced Filters */}
-          <div className="border-t border-gray-200 pt-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Filter className="w-4 h-4 text-gray-600" />
-              <span className="text-xs font-medium text-gray-700">ADVANCED FILTERS</span>
-            </div>
-            <div className="grid grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Client Name</label>
-                <input
-                  type="text"
-                  value={filters.clientName}
-                  onChange={(e) => setFilters({ ...filters, clientName: e.target.value })}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:border-gray-500"
-                  placeholder="Client..."
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Case Type</label>
-                <select
-                  value={filters.caseType}
-                  onChange={(e) => setFilters({ ...filters, caseType: e.target.value })}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:border-gray-500"
-                >
-                  <option value="">All Types</option>
-                  <option value="AUDIT">Audit</option>
-                  <option value="CONSULTING">Consulting</option>
-                  <option value="TAX">Tax</option>
-                  <option value="ADVISORY">Advisory</option>
-                  <option value="DUE_DILIGENCE">Due Diligence</option>
-                  <option value="RISK_ASSESSMENT">Risk Assessment</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Fiscal Year</label>
-                <select
-                  value={filters.fiscalYear}
-                  onChange={(e) => setFilters({ ...filters, fiscalYear: e.target.value })}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:border-gray-500"
-                >
-                  <option value="">All Years</option>
-                  {[2024, 2023, 2022, 2021, 2020, 2019, 2018].map(year => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Partner Name</label>
-                <input
-                  type="text"
-                  value={filters.partnerName}
-                  onChange={(e) => setFilters({ ...filters, partnerName: e.target.value })}
-                  className="w-full px-2 py-1.5 text-sm border border-gray-300 focus:outline-none focus:border-gray-500"
-                  placeholder="Partner..."
-                />
-              </div>
-            </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSearch}
+              disabled={searching}
+              className="flex items-center gap-2 px-4 py-2 bg-black text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
+            >
+              <SearchIcon className="w-4 h-4" />
+              {searching ? 'Searching...' : 'Search'}
+            </button>
+            <button
+              onClick={clearSearch}
+              className="px-4 py-2 border border-gray-300 text-sm hover:bg-gray-50 transition-colors"
+            >
+              Clear
+            </button>
           </div>
         </div>
 
         {/* Results */}
-        {searched && (
+        {searching ? (
+          <LoadingTable rows={5} />
+        ) : searched && results.length === 0 ? (
+          <EmptySearchResults />
+        ) : results.length > 0 ? (
           <div className="bg-white border border-gray-300">
-            <div className="px-4 py-3 border-b border-gray-300 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-gray-900">SEARCH RESULTS</h2>
-                <p className="text-xs text-gray-600 mt-1">{results.length} cases found</p>
-              </div>
-              {results.length > 0 && (
-                <button
-                  onClick={handleExport}
-                  className="px-3 py-1.5 text-sm border border-gray-300 hover:bg-gray-50 flex items-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  Export CSV
-                </button>
-              )}
+            {/* Header */}
+            <div className="border-b border-gray-300 bg-gray-50 p-4">
+              <h2 className="text-sm font-semibold text-gray-900">
+                Search Results ({results.length})
+              </h2>
             </div>
 
-            {loading ? (
-              <div className="p-8 text-center text-sm text-gray-600">Searching...</div>
-            ) : results.length === 0 ? (
-              <div className="p-8 text-center text-sm text-gray-600">No cases found</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-300">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">CASE NUMBER</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">CASE NAME</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">CLIENT</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">TYPE</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">YEAR</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">PARTNER</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">FINALIZED</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-700">ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {results.map((result) => (
-                      <tr key={result.caseId} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-sm font-medium text-gray-900">{result.caseNumber}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{result.caseName}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{result.clientName}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{result.caseType}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{result.fiscalYear}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{result.partnerName}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">
-                          {new Date(result.finalizedAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-2">
-                          <a
-                            href={`/cases/${result.caseId}`}
-                            className="text-sm text-blue-600 hover:underline"
-                          >
-                            View
-                          </a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {/* Results List */}
+            <div className="divide-y divide-gray-200">
+              {results.map((result: any) => (
+                <Link
+                  key={result.id}
+                  to={`/cases/${result.id}`}
+                  className="block p-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <p className="text-sm font-medium text-gray-900">
+                          {result.caseNumber}
+                        </p>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${getStatusColor(result.status)}`}>
+                          {result.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {result.client?.name} • FY {result.fiscalYear} • {result.caseType}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">
+                        {new Date(result.createdAt).toLocaleDateString()}
+                      </p>
+                      {result.preparedBy && (
+                        <p className="text-xs text-gray-500">
+                          by {result.preparedBy.firstName} {result.preparedBy.lastName}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
-        )}
-
-        {/* Notice */}
-        <div className="mt-4 p-3 bg-gray-50 border border-gray-300">
-          <p className="text-xs text-gray-600">
-            Search is fast and boring. Historical data persists even if employees leave.
-          </p>
-        </div>
+        ) : null}
       </div>
     </div>
   );
