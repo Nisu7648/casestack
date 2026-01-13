@@ -6,11 +6,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "migrate": "npx prisma migrate deploy",
-    "migrate:dev": "npx prisma migrate dev",
-    "generate": "npx prisma generate",
-    "studio": "npx prisma studio",
-    "seed": "node prisma/seed.js"
+    "build": "echo 'No build step needed for Node.js'",
+    "postinstall": "prisma generate || echo 'Prisma generate skipped'",
+    "migrate": "prisma migrate deploy",
+    "migrate:dev": "prisma migrate dev",
+    "generate": "prisma generate",
+    "studio": "prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",
@@ -18,24 +19,13 @@
     "cors": "^2.8.5",
     "helmet": "^7.1.0",
     "bcrypt": "^5.1.1",
-    "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "uuid": "^9.0.1",
     "dotenv": "^16.3.1",
     "multer": "^1.4.5-lts.1",
-    "pdf-parse": "^1.1.1",
-    "pdfkit": "^0.14.0",
-    "exceljs": "^4.4.0",
-    "archiver": "^6.0.1",
     "axios": "^1.6.2",
-    "tesseract.js": "^5.0.4",
-    "nodemailer": "^6.9.7",
-    "express-rate-limit": "^7.1.5",
-    "express-validator": "^7.0.1",
-    "morgan": "^1.10.0",
     "compression": "^1.7.4",
-    "winston": "^3.11.0",
-    "winston-daily-rotate-file": "^4.7.1"
+    "express-rate-limit": "^7.1.5"
   },
   "devDependencies": {
     "prisma": "^5.7.0",
@@ -50,8 +40,7 @@
     "case-management",
     "accounting",
     "audit",
-    "ai-powered",
-    "automation"
+    "ai-powered"
   ],
   "author": "CASESTACK Team",
   "license": "PROPRIETARY"
