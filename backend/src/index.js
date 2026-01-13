@@ -43,7 +43,8 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    version: '2.0.0'
   });
 });
 
@@ -53,7 +54,9 @@ app.get('/', (req, res) => {
     version: '2.0.0',
     status: 'running',
     features: 16,
-    endpoints: 67
+    endpoints: 67,
+    health: '/health',
+    documentation: 'https://github.com/Nisu7648/casestack'
   });
 });
 
@@ -61,78 +64,30 @@ app.get('/', (req, res) => {
 // ROUTES
 // ============================================
 
-// Core routes (if they exist)
-try {
-  const authRoutes = require('./routes/casestack/auth');
-  app.use('/api/auth', authRoutes);
-} catch (e) {
-  console.log('Auth routes not found');
-}
+// Core routes (load if they exist)
+const routes = [
+  { path: '/api/auth', file: './routes/casestack/auth' },
+  { path: '/api/cases', file: './routes/casestack/cases' },
+  { path: '/api/clients', file: './routes/casestack/clients' },
+  { path: '/api/firm', file: './routes/casestack/firm' },
+  { path: '/api/templates', file: './routes/casestack/templates' },
+  { path: '/api/tasks', file: './routes/casestack/tasks' },
+  { path: '/api/calendar', file: './routes/casestack/calendar' },
+  { path: '/api/client-portal', file: './routes/casestack/client-portal' },
+  { path: '/api/reports', file: './routes/casestack/reports' },
+  { path: '/api/ai-analysis', file: './routes/casestack/ai-analysis' },
+  { path: '/api/google-auth', file: './routes/casestack/google-auth' }
+];
 
-try {
-  const caseRoutes = require('./routes/casestack/cases');
-  app.use('/api/cases', caseRoutes);
-} catch (e) {
-  console.log('Case routes not found');
-}
-
-try {
-  const clientRoutes = require('./routes/casestack/clients');
-  app.use('/api/clients', clientRoutes);
-} catch (e) {
-  console.log('Client routes not found');
-}
-
-// Advanced features
-try {
-  const firmRoutes = require('./routes/casestack/firm');
-  app.use('/api/firm', firmRoutes);
-} catch (e) {
-  console.log('Firm routes not found');
-}
-
-try {
-  const templateRoutes = require('./routes/casestack/templates');
-  app.use('/api/templates', templateRoutes);
-} catch (e) {
-  console.log('Template routes not found');
-}
-
-try {
-  const taskRoutes = require('./routes/casestack/tasks');
-  app.use('/api/tasks', taskRoutes);
-} catch (e) {
-  console.log('Task routes not found');
-}
-
-try {
-  const calendarRoutes = require('./routes/casestack/calendar');
-  app.use('/api/calendar', calendarRoutes);
-} catch (e) {
-  console.log('Calendar routes not found');
-}
-
-try {
-  const clientPortalRoutes = require('./routes/casestack/client-portal');
-  app.use('/api/client-portal', clientPortalRoutes);
-} catch (e) {
-  console.log('Client portal routes not found');
-}
-
-try {
-  const reportsRoutes = require('./routes/casestack/reports');
-  app.use('/api/reports', reportsRoutes);
-} catch (e) {
-  console.log('Reports routes not found');
-}
-
-// New features
-try {
-  const aiAnalysisRoutes = require('./routes/casestack/ai-analysis');
-  app.use('/api/ai-analysis', aiAnalysisRoutes);
-} catch (e) {
-  console.log('AI analysis routes not found');
-}
+routes.forEach(({ path, file }) => {
+  try {
+    const route = require(file);
+    app.use(path, route);
+    console.log(`✅ Loaded route: ${path}`);
+  } catch (e) {
+    console.log(`⚠️  Route not found: ${path}`);
+  }
+});
 
 // ============================================
 // ERROR HANDLING
@@ -170,17 +125,19 @@ app.use((err, req, res, next) => {
 
 // ============================================
 // START SERVER
+// IMPORTANT: Bind to 0.0.0.0 for Render.com
 // ============================================
 
 const PORT = process.env.PORT || 5000;
+const HOST = '0.0.0.0'; // Required for Render
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log('');
   console.log('🚀 ============================================');
   console.log('🚀 CASESTACK API SERVER');
   console.log('🚀 ============================================');
   console.log('');
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Server running on ${HOST}:${PORT}`);
   console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✅ Health check: http://localhost:${PORT}/health`);
   console.log('');
@@ -201,6 +158,17 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
   process.exit(0);
+});
+
+// Handle uncaught errors
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
 });
 
 module.exports = app;
