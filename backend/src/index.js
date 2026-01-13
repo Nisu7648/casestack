@@ -14,10 +14,12 @@ const app = express();
 // Security
 app.use(helmet());
 
-// CORS
+// CORS - Allow all origins for now
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true
+  origin: '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Body parsing
@@ -29,10 +31,16 @@ app.use(compression());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100
 });
 app.use('/api/', limiter);
+
+// Request logging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
 
 // ============================================
 // HEALTH CHECK
@@ -56,36 +64,73 @@ app.get('/', (req, res) => {
     features: 16,
     endpoints: 67,
     health: '/health',
-    documentation: 'https://github.com/Nisu7648/casestack'
+    documentation: 'https://github.com/Nisu7648/casestack',
+    availableRoutes: [
+      'POST /api/auth/register',
+      'POST /api/auth/login',
+      'GET /api/auth/verify',
+      'GET /api/auth/test',
+      'POST /api/firm/create',
+      'GET /api/firm/details',
+      'PUT /api/firm/update',
+      'GET /api/firm/test'
+    ]
   });
 });
 
 // ============================================
-// ROUTES
+// ROUTES - SIMPLE VERSIONS (NO DEPENDENCIES)
 // ============================================
 
-// Core routes (load if they exist)
-const routes = [
-  { path: '/api/auth', file: './routes/casestack/auth' },
+// Simple auth routes (works immediately)
+try {
+  const authSimpleRoutes = require('./routes/casestack/auth-simple');
+  app.use('/api/auth', authSimpleRoutes);
+  console.log('✅ Loaded: /api/auth (simple)');
+} catch (e) {
+  console.error('❌ Failed to load auth routes:', e.message);
+}
+
+// Simple firm routes (works immediately)
+try {
+  const firmSimpleRoutes = require('./routes/casestack/firm-simple');
+  app.use('/api/firm', firmSimpleRoutes);
+  console.log('✅ Loaded: /api/firm (simple)');
+} catch (e) {
+  console.error('❌ Failed to load firm routes:', e.message);
+}
+
+// Google auth routes
+try {
+  const googleAuthRoutes = require('./routes/casestack/google-auth');
+  app.use('/api/google-auth', googleAuthRoutes);
+  console.log('✅ Loaded: /api/google-auth');
+} catch (e) {
+  console.log('⚠️  Google auth routes not loaded');
+}
+
+// ============================================
+// OPTIONAL ROUTES (Load if available)
+// ============================================
+
+const optionalRoutes = [
   { path: '/api/cases', file: './routes/casestack/cases' },
   { path: '/api/clients', file: './routes/casestack/clients' },
-  { path: '/api/firm', file: './routes/casestack/firm' },
   { path: '/api/templates', file: './routes/casestack/templates' },
   { path: '/api/tasks', file: './routes/casestack/tasks' },
   { path: '/api/calendar', file: './routes/casestack/calendar' },
   { path: '/api/client-portal', file: './routes/casestack/client-portal' },
   { path: '/api/reports', file: './routes/casestack/reports' },
-  { path: '/api/ai-analysis', file: './routes/casestack/ai-analysis' },
-  { path: '/api/google-auth', file: './routes/casestack/google-auth' }
+  { path: '/api/ai-analysis', file: './routes/casestack/ai-analysis' }
 ];
 
-routes.forEach(({ path, file }) => {
+optionalRoutes.forEach(({ path, file }) => {
   try {
     const route = require(file);
     app.use(path, route);
-    console.log(`✅ Loaded route: ${path}`);
+    console.log(`✅ Loaded: ${path}`);
   } catch (e) {
-    console.log(`⚠️  Route not found: ${path}`);
+    console.log(`⚠️  Optional route not loaded: ${path}`);
   }
 });
 
@@ -95,21 +140,18 @@ routes.forEach(({ path, file }) => {
 
 // 404 handler
 app.use((req, res) => {
+  console.log(`404 - Not found: ${req.method} ${req.url}`);
   res.status(404).json({
     error: 'Not Found',
     message: `Route ${req.method} ${req.url} not found`,
     availableRoutes: [
       'GET /',
       'GET /health',
-      'POST /api/auth/login',
       'POST /api/auth/register',
-      'GET /api/cases',
-      'POST /api/cases',
-      'GET /api/firm/details',
-      'POST /api/templates',
-      'GET /api/tasks',
-      'POST /api/calendar/events',
-      'GET /api/reports/overview'
+      'POST /api/auth/login',
+      'GET /api/auth/verify',
+      'POST /api/firm/create',
+      'GET /api/firm/details'
     ]
   });
 });
@@ -119,7 +161,10 @@ app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(err.status || 500).json({
     error: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: err.stack,
+      details: err
+    })
   });
 });
 
@@ -129,7 +174,7 @@ app.use((err, req, res, next) => {
 // ============================================
 
 const PORT = process.env.PORT || 5000;
-const HOST = '0.0.0.0'; // Required for Render
+const HOST = '0.0.0.0';
 
 app.listen(PORT, HOST, () => {
   console.log('');
@@ -140,6 +185,7 @@ app.listen(PORT, HOST, () => {
   console.log(`✅ Server running on ${HOST}:${PORT}`);
   console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`✅ Health check: http://localhost:${PORT}/health`);
+  console.log(`✅ API docs: http://localhost:${PORT}/`);
   console.log('');
   console.log('📊 Features: 16 advanced features');
   console.log('📊 Endpoints: 67+ API endpoints');
@@ -163,12 +209,10 @@ process.on('SIGINT', () => {
 // Handle uncaught errors
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
 });
 
 module.exports = app;
