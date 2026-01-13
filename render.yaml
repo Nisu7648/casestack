@@ -1,6 +1,6 @@
 # ============================================
 # RENDER.COM DEPLOYMENT CONFIGURATION
-# Free tier deployment for CASESTACK
+# Fixed for free tier deployment
 # ============================================
 
 services:
@@ -10,8 +10,9 @@ services:
     env: node
     region: oregon
     plan: free
-    buildCommand: cd backend && npm install && npx prisma generate
-    startCommand: cd backend && npm start
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -22,7 +23,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: PORT
-        value: 5000
+        value: 10000
     healthCheckPath: /health
 
   # Frontend Service
@@ -31,7 +32,8 @@ services:
     env: static
     region: oregon
     plan: free
-    buildCommand: cd frontend && npm install && npm run build
+    rootDir: frontend
+    buildCommand: npm install && npm run build
     staticPublishPath: frontend/dist
     routes:
       - type: rewrite
