@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+
+# Environment files
+.env*
+
+# Logs
+*.log
+
+# Database
+prisma/migrations/
+
+# Documentation (preserve formatting)
+*.md
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
