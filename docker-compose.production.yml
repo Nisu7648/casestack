@@ -1,0 +1,246 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # NGINX REVERSE PROXY
+  # ============================================
+  nginx:
+    image: nginx:alpine
+    container_name: casestack-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - casestack-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # BACKEND API
+  # ============================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.production
+    container_name: casestack-backend
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres:5432/casestack?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_URL: redis://redis:6379
+      PORT: 5000
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - casestack-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # FRONTEND (BUILD ONLY)
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.production
+    container_name: casestack-frontend
+    volumes:
+      - frontend-dist:/app/dist
+    networks:
+      - casestack-network
+
+  # ============================================
+  # POSTGRESQL DATABASE
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: casestack-postgres
+    environment:
+      POSTGRES_DB: casestack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - casestack-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=1GB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "default_statistics_target=100"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "work_mem=1310kB"
+      - "-c"
+      - "min_wal_size=1GB"
+      - "-c"
+      - "max_wal_size=4GB"
+
+  # ============================================
+  # REDIS CACHE
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: casestack-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - casestack-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # MONITORING - PROMETHEUS
+  # ============================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: casestack-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      - "9090:9090"
+    networks:
+      - casestack-network
+    restart: unless-stopped
+
+  # ============================================
+  # MONITORING - GRAFANA
+  # ============================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: casestack-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - casestack-network
+    restart: unless-stopped
+
+  # ============================================
+  # BACKUP SERVICE
+  # ============================================
+  backup:
+    image: postgres:15-alpine
+    container_name: casestack-backup
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: casestack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      BACKUP_SCHEDULE: "0 2 * * *"  # Daily at 2 AM
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    command: sh -c "crond -f -l 2"
+    depends_on:
+      - postgres
+    networks:
+      - casestack-network
+    restart: unless-stopped
+
+# ============================================
+# NETWORKS
+# ============================================
+networks:
+  casestack-network:
+    driver: bridge
+
+# ============================================
+# VOLUMES
+# ============================================
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  frontend-dist:
+    driver: local
