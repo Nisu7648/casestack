@@ -11,10 +11,42 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    host: true, // Listen on all addresses
+    strictPort: false, // Try next port if 3000 is busy
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_API_URL || 'http://localhost:5000',
         changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api/, '/api'),
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('[Proxy Error]', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log('[Proxy Request]', req.method, req.url);
+          });
+          proxy.on('proxyRes', (proxyRes, req, _res) => {
+            console.log('[Proxy Response]', proxyRes.statusCode, req.url);
+          });
+        },
+      },
+      '/health': {
+        target: process.env.VITE_API_URL || 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          ui: ['lucide-react'],
+        },
       },
     },
   },
