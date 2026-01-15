@@ -1,152 +1,225 @@
-# CASESTACK
+# CaseStack
 
-**Professional case management system for audit, legal, and consulting firms.**
+**Professional Case Management Platform for Law Firms**
+
+Clean, fast, and powerful case management with AI-powered insights and geo-based pricing.
 
 ---
 
-## 🚀 QUICK START
+## Features
 
-### Docker (Recommended)
+- **Case Management** - Unlimited cases with full lifecycle tracking
+- **AI Assistant** - Predictive analytics, risk assessment, smart recommendations
+- **Client Portal** - Secure client communication and document sharing
+- **Document Management** - Unlimited storage with version control
+- **Time Tracking** - Billable hours tracking and reporting
+- **Workflow Automation** - Custom workflows and task automation
+- **Video Meetings** - Built-in video conferencing
+- **E-Signatures** - Contract signing and management
+- **Advanced Reporting** - Business intelligence and analytics
+- **API Access** - Full REST API for integrations
+
+---
+
+## Pricing
+
+**Simple per-user pricing with geo-based rates**
+
+- Switzerland: CHF 120/user/month
+- United States: USD 78/user/month
+- United Kingdom: GBP 78/user/month
+- India: INR 35/user/month
+- *Pricing varies by country based on purchasing power*
+
+**All features included. No limits. 14-day free trial.**
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- PostgreSQL 15+
+- Redis 7+
+- Docker (optional)
+
+### Installation
+
 ```bash
-git clone https://github.com/Nisu7648/casestack.git
+# Clone repository
+git clone https://github.com/yourusername/casestack.git
 cd casestack
-cp .env.docker .env
+
+# Install backend dependencies
+cd backend
+npm install
+
+# Install frontend dependencies
+cd ../frontend
+npm install
+
+# Setup environment variables
+cp .env.example .env
+# Edit .env with your configuration
+
+# Run database migrations
+cd backend
+npx prisma migrate dev
+
+# Start development servers
+npm run dev  # Backend (port 5000)
+cd ../frontend
+npm run dev  # Frontend (port 5173)
+```
+
+### Docker Deployment
+
+```bash
+# Production deployment
+docker-compose -f docker-compose.production.yml up -d
+
+# Development
 docker-compose up -d
 ```
 
-Open: http://localhost:8080
+---
 
-### Manual Setup
-```bash
-git clone https://github.com/Nisu7648/casestack.git
-cd casestack
-chmod +x quickstart.sh
-./quickstart.sh
+## Tech Stack
+
+**Backend:**
+- Node.js + Express
+- PostgreSQL + Prisma ORM
+- Redis (caching)
+- Stripe (payments)
+- JWT authentication
+
+**Frontend:**
+- React + TypeScript
+- Vite
+- TailwindCSS
+- Axios
+
+**Infrastructure:**
+- Docker
+- NGINX
+- Prometheus + Grafana (monitoring)
+
+---
+
+## API Documentation
+
+### Authentication
+```
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/logout
 ```
 
-Open: http://localhost:5173
-
----
-
-## 📦 WHAT'S INCLUDED
-
-- **Backend:** Node.js + Express + PostgreSQL
-- **Frontend:** React + TypeScript + Vite
-- **Features:** Case management, file upload, audit trail, device sessions
-- **Theme:** Professional black/white modes only
-
----
-
-## 🎨 DESIGN
-
-- **Black Mode** (default) - Pure black background, white text
-- **White Mode** - Pure white background, black text
-- **No fancy colors** - Professional and minimal
-- **Toggle:** Sun/moon icon in top-right corner
-
----
-
-## 📁 STRUCTURE
-
+### Cases
 ```
-casestack/
-├── backend/          # API server
-├── frontend/         # React app
-├── docker-compose.yml
-├── quickstart.sh
-└── README.md
+GET    /api/cases
+POST   /api/cases
+GET    /api/cases/:id
+PUT    /api/cases/:id
+DELETE /api/cases/:id
+```
+
+### AI
+```
+POST /api/ai/cases/:id/predict
+POST /api/ai/cases/:id/risk
+POST /api/ai/cases/:id/recommendations
+```
+
+### Billing
+```
+GET  /api/billing/pricing/geo
+POST /api/billing/subscription
+GET  /api/billing/subscription
 ```
 
 ---
 
-## 🔧 CONFIGURATION
+## Environment Variables
 
-### Backend (.env)
 ```env
+# Database
 DATABASE_URL=postgresql://user:password@localhost:5432/casestack
-JWT_SECRET=your-secret-key
-STORAGE_TYPE=local
-```
 
-### Frontend (.env)
-```env
+# JWT
+JWT_SECRET=your-secret-key
+
+# Stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# Frontend
 VITE_API_URL=http://localhost:5000
 ```
 
 ---
 
-## 📚 DOCUMENTATION
+## Deployment
 
-- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Production deployment
-- **[FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)** - Free hosting (Render + Vercel)
-- **[DOCKER_DEPLOYMENT_GUIDE.md](DOCKER_DEPLOYMENT_GUIDE.md)** - Docker setup
-- **[DOCKER_QUICK_START.md](DOCKER_QUICK_START.md)** - 3-command Docker start
-- **[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)** - Manual setup guide
-- **[DEVICE_SESSION_MANAGEMENT.md](DEVICE_SESSION_MANAGEMENT.md)** - Device session feature
+### Production Checklist
 
----
+- [ ] Set environment variables
+- [ ] Configure SSL certificates
+- [ ] Setup database backups
+- [ ] Configure monitoring
+- [ ] Setup Stripe webhooks
+- [ ] Test payment flow
+- [ ] Configure email service
+- [ ] Setup domain and DNS
 
-## ✅ FEATURES
+### Deployment Guides
 
-- Case finalization workflow
-- File upload/download with SHA-256 verification
-- Advanced search
-- Audit trail
-- User management
-- Device session management (max 3 devices)
-- Email notifications
-- PDF export
-- Role-based access
+- [Docker Deployment](DOCKER_DEPLOYMENT_GUIDE.md)
+- [Production Deployment](PRODUCTION_DEPLOYMENT_GUIDE.md)
+- [Render Deployment](RENDER_DEPLOYMENT_GUIDE.md)
 
 ---
 
-## 🚀 DEPLOYMENT OPTIONS
+## Contributing
 
-### 1. Free Hosting (Render + Vercel)
-- Backend: Render.com (free tier)
-- Frontend: Vercel (free)
-- Cost: $0/month
-- Guide: [FREE_DEPLOYMENT_GUIDE.md](FREE_DEPLOYMENT_GUIDE.md)
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
 
-### 2. Docker (VPS)
-- DigitalOcean, Linode, Vultr
-- Cost: $5-20/month
-- Guide: [DOCKER_DEPLOYMENT_GUIDE.md](DOCKER_DEPLOYMENT_GUIDE.md)
-
-### 3. Local Development
-- Run on your machine
-- Cost: $0
-- Guide: [DOCKER_QUICK_START.md](DOCKER_QUICK_START.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ---
 
-## 💻 TECH STACK
+## License
 
-**Backend:**
-- Node.js + Express
-- PostgreSQL + Prisma ORM
-- JWT Authentication
-- Winston Logger
-- Nodemailer
-- PDFKit
-
-**Frontend:**
-- React + TypeScript
-- Vite
-- React Router
-- Axios
-- Professional black/white theme
+This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
 
 ---
 
-## 📞 SUPPORT
+## Support
 
-For issues:
-1. Check documentation in repo
-2. Check logs: `docker-compose logs -f`
-3. Check health: `curl http://localhost:5000/health`
+- Documentation: [docs.casestack.com](https://docs.casestack.com)
+- Email: support@casestack.com
+- Issues: [GitHub Issues](https://github.com/yourusername/casestack/issues)
 
 ---
 
-**CASESTACK - Professional Case Management**  
-**Production-ready. Deploy in minutes.**
+## Roadmap
+
+- [ ] Mobile apps (iOS/Android)
+- [ ] Advanced AI features
+- [ ] Multi-language support
+- [ ] Accounting integrations
+- [ ] Court calendar sync
+- [ ] Legal research integration
+
+---
+
+**Built with ❤️ for law firms worldwide**
