@@ -1,0 +1,928 @@
+// CaseStack 3.0 - Complete Database Schema
+// 12 Revolutionary Features
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// EXISTING MODELS (Enhanced)
+// ============================================
+
+model Firm {
+  id        String   @id @default(uuid())
+  name      String
+  country   String
+  billingEnabled Boolean @default(false)
+  
+  // NEW: AI & Customization
+  aiEnabled Boolean @default(true)
+  aiCredits Int @default(1000)
+  whiteLabel Boolean @default(false)
+  customDomain String?
+  logoUrl String?
+  brandColor String @default("#000000")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  users     User[]
+  activityLogs ActivityLog[]
+  clients   Client[]
+  cases     Case[]
+  workflowTemplates WorkflowTemplate[]
+  workflows Workflow[]
+  contracts Contract[]
+  invoices Invoice[]
+  meetings VideoMeeting[]
+  
+  @@map("firms")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      UserRole @default(CONSULTANT)
+  isActive  Boolean  @default(true)
+  
+  // NEW: Voice & Preferences
+  voiceEnabled Boolean @default(false)
+  preferredLanguage String @default("en")
+  timezone String @default("UTC")
+  avatarUrl String?
+  phoneNumber String?
+  
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLoginAt DateTime?
+  
+  activityLogs ActivityLog[]
+  casesLead    Case[]        @relation("CaseLead")
+  caseMembers  CaseMember[]
+  tasks        Task[]
+  timeEntries  TimeEntry[]
+  caseActivities CaseActivity[]
+  activityMentions CaseActivity[] @relation("ActivityMentions")
+  comments     Comment[]
+  documentsUploaded Document[]
+  milestones   Milestone[]
+  risks        Risk[]
+  aiInteractions AIInteraction[]
+  voiceCommands VoiceCommand[]
+  meetingsHosted VideoMeeting[] @relation("MeetingHost")
+  meetingParticipants MeetingParticipant[]
+  contractsCreated Contract[] @relation("ContractCreator")
+  invoicesCreated Invoice[] @relation("InvoiceCreator")
+  
+  @@index([firmId])
+  @@index([email])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  PARTNER
+  MANAGER
+  CONSULTANT
+  VIEWER
+  CLIENT
+}
+
+model Case {
+  id          String   @id @default(uuid())
+  caseNumber  String   @unique
+  title       String
+  description String?
+  status      CaseStatus @default(OPEN)
+  priority    CasePriority @default(MEDIUM)
+  
+  // NEW: AI Predictions
+  aiPredictedOutcome String?
+  aiConfidenceScore Float?
+  aiRecommendations Json?
+  aiRiskScore Float @default(0)
+  estimatedCompletionDate DateTime?
+  
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  leadId      String
+  lead        User     @relation("CaseLead", fields: [leadId], references: [id])
+  
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  closedAt    DateTime?
+  
+  members     CaseMember[]
+  documents   Document[]
+  tasks       Task[]
+  timeEntries TimeEntry[]
+  activities  CaseActivity[]
+  comments    Comment[]
+  milestones  Milestone[]
+  risks       Risk[]
+  customFields CustomFieldValue[]
+  aiInteractions AIInteraction[]
+  contracts   Contract[]
+  invoices    Invoice[]
+  
+  @@index([firmId])
+  @@index([clientId])
+  @@index([leadId])
+  @@index([status])
+  @@map("cases")
+}
+
+// ============================================
+// NEW FEATURE 1: AI CASE ASSISTANT
+// ============================================
+
+model AIInteraction {
+  id        String   @id @default(uuid())
+  
+  type      AIInteractionType
+  prompt    String
+  response  String
+  confidence Float?
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  caseId    String?
+  case      Case?    @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  metadata  Json?
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([caseId])
+  @@index([type])
+  @@map("ai_interactions")
+}
+
+enum AIInteractionType {
+  CASE_PREDICTION
+  DOCUMENT_ANALYSIS
+  RECOMMENDATION
+  SUMMARY
+  RISK_ASSESSMENT
+  TIMELINE_PREDICTION
+}
+
+// ============================================
+// NEW FEATURE 2: INTELLIGENT DOCUMENT ANALYSIS
+// ============================================
+
+model Document {
+  id          String   @id @default(uuid())
+  filename    String
+  originalName String
+  mimeType    String
+  size        Int
+  path        String
+  sha256      String
+  
+  // NEW: AI Analysis
+  aiExtractedData Json?
+  aiCategory String?
+  aiConfidence Float?
+  ocrText String?
+  keyPhrases String[]
+  entities Json?
+  isDuplicate Boolean @default(false)
+  duplicateOf String?
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  uploadedById String
+  uploadedBy   User    @relation(fields: [uploadedById], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([uploadedById])
+  @@index([sha256])
+  @@map("documents")
+}
+
+// ============================================
+// NEW FEATURE 4: SMART WORKFLOW AUTOMATION
+// ============================================
+
+model Workflow {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  
+  trigger     Json     // Trigger configuration
+  conditions  Json?    // Conditional logic
+  actions     Json     // Actions to perform
+  
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  executions  WorkflowExecution[]
+  
+  @@index([firmId])
+  @@index([isActive])
+  @@map("workflows")
+}
+
+model WorkflowExecution {
+  id          String   @id @default(uuid())
+  
+  workflowId  String
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  
+  status      WorkflowExecutionStatus
+  triggerData Json
+  result      Json?
+  error       String?
+  
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  
+  @@index([workflowId])
+  @@index([status])
+  @@map("workflow_executions")
+}
+
+enum WorkflowExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ============================================
+// NEW FEATURE 5: VOICE COMMANDS
+// ============================================
+
+model VoiceCommand {
+  id          String   @id @default(uuid())
+  
+  audioUrl    String?
+  transcript  String
+  command     String
+  parameters  Json?
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  executed    Boolean  @default(false)
+  result      Json?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([executed])
+  @@map("voice_commands")
+}
+
+// ============================================
+// NEW FEATURE 6: EMAIL INTEGRATION
+// ============================================
+
+model EmailIntegration {
+  id          String   @id @default(uuid())
+  
+  provider    EmailProvider
+  email       String
+  accessToken String
+  refreshToken String?
+  
+  userId      String   @unique
+  
+  isActive    Boolean  @default(true)
+  lastSyncAt  DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  emails      Email[]
+  
+  @@index([userId])
+  @@map("email_integrations")
+}
+
+enum EmailProvider {
+  GMAIL
+  OUTLOOK
+  IMAP
+}
+
+model Email {
+  id          String   @id @default(uuid())
+  
+  messageId   String   @unique
+  subject     String
+  from        String
+  to          String[]
+  cc          String[]
+  bcc         String[]
+  body        String
+  htmlBody    String?
+  
+  integrationId String
+  integration EmailIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  
+  caseId      String?
+  
+  attachments Json?
+  
+  sentAt      DateTime
+  receivedAt  DateTime @default(now())
+  
+  @@index([integrationId])
+  @@index([caseId])
+  @@map("emails")
+}
+
+// ============================================
+// NEW FEATURE 7: REAL-TIME COLLABORATION
+// ============================================
+
+model CollaborationSession {
+  id          String   @id @default(uuid())
+  
+  entityType  String   // "case", "document", etc.
+  entityId    String
+  
+  participants Json    // Array of user IDs with cursor positions
+  
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  
+  @@index([entityType, entityId])
+  @@map("collaboration_sessions")
+}
+
+model ChatMessage {
+  id          String   @id @default(uuid())
+  
+  content     String
+  
+  senderId    String
+  
+  entityType  String   // "case", "firm", etc.
+  entityId    String
+  
+  mentions    String[] // User IDs mentioned
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  @@index([entityType, entityId])
+  @@index([senderId])
+  @@map("chat_messages")
+}
+
+// ============================================
+// NEW FEATURE 8: VIDEO CONFERENCING
+// ============================================
+
+model VideoMeeting {
+  id          String   @id @default(uuid())
+  
+  title       String
+  description String?
+  
+  hostId      String
+  host        User     @relation("MeetingHost", fields: [hostId], references: [id])
+  
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  caseId      String?
+  
+  roomId      String   @unique
+  password    String?
+  
+  scheduledAt DateTime
+  startedAt   DateTime?
+  endedAt     DateTime?
+  
+  recordingUrl String?
+  transcriptUrl String?
+  
+  participants MeetingParticipant[]
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([firmId])
+  @@index([hostId])
+  @@index([caseId])
+  @@map("video_meetings")
+}
+
+model MeetingParticipant {
+  id          String   @id @default(uuid())
+  
+  meetingId   String
+  meeting     VideoMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  joinedAt    DateTime?
+  leftAt      DateTime?
+  duration    Int?     // seconds
+  
+  @@unique([meetingId, userId])
+  @@index([meetingId])
+  @@index([userId])
+  @@map("meeting_participants")
+}
+
+// ============================================
+// NEW FEATURE 10: SMART CONTRACT MANAGEMENT
+// ============================================
+
+model Contract {
+  id          String   @id @default(uuid())
+  
+  title       String
+  description String?
+  content     String
+  
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id])
+  
+  createdById String
+  createdBy   User     @relation("ContractCreator", fields: [createdById], references: [id])
+  
+  status      ContractStatus @default(DRAFT)
+  
+  signers     Json     // Array of signer objects
+  signedBy    String[] // User IDs who signed
+  
+  templateId  String?
+  version     Int      @default(1)
+  
+  expiresAt   DateTime?
+  signedAt    DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([caseId])
+  @@index([status])
+  @@map("contracts")
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  SIGNED
+  EXPIRED
+  CANCELLED
+}
+
+// ============================================
+// NEW FEATURE 11: ADVANCED BILLING & INVOICING
+// ============================================
+
+model Invoice {
+  id          String   @id @default(uuid())
+  
+  invoiceNumber String @unique
+  
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  caseId      String?
+  case        Case?    @relation(fields: [caseId], references: [id])
+  
+  createdById String
+  createdBy   User     @relation("InvoiceCreator", fields: [createdById], references: [id])
+  
+  clientName  String
+  clientEmail String
+  
+  items       Json     // Array of line items
+  subtotal    Float
+  tax         Float    @default(0)
+  discount    Float    @default(0)
+  total       Float
+  
+  status      InvoiceStatus @default(DRAFT)
+  
+  dueDate     DateTime
+  paidAt      DateTime?
+  
+  paymentMethod String?
+  paymentReference String?
+  
+  notes       String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([caseId])
+  @@index([status])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model TimeEntry {
+  id          String   @id @default(uuid())
+  
+  description String
+  hours       Float
+  rate        Float?
+  amount      Float?
+  
+  // NEW: Auto-tracking
+  autoTracked Boolean  @default(false)
+  startTime   DateTime?
+  endTime     DateTime?
+  
+  caseId      String
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  billable    Boolean  @default(true)
+  invoiced    Boolean  @default(false)
+  
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  
+  @@index([caseId])
+  @@index([userId])
+  @@index([billable])
+  @@map("time_entries")
+}
+
+// ============================================
+// EXISTING MODELS (Kept for compatibility)
+// ============================================
+
+model Client {
+  id          String   @id @default(uuid())
+  name        String
+  industry    String?
+  country     String?
+  website     String?
+  
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+  
+  address     String?
+  city        String?
+  state       String?
+  postalCode  String?
+  
+  notes       String?
+  
+  // NEW: Portal Access
+  portalEnabled Boolean @default(false)
+  portalPassword String?
+  lastPortalLogin DateTime?
+  
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  cases       Case[]
+  contacts    Contact[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([firmId])
+  @@index([name])
+  @@map("clients")
+}
+
+model Contact {
+  id          String   @id @default(uuid())
+  
+  firstName   String
+  lastName    String
+  email       String
+  phone       String?
+  position    String?
+  
+  isPrimary   Boolean  @default(false)
+  
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([clientId])
+  @@index([email])
+  @@map("contacts")
+}
+
+enum CaseStatus {
+  OPEN
+  IN_PROGRESS
+  ON_HOLD
+  CLOSED
+  ARCHIVED
+}
+
+enum CasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model CaseMember {
+  id        String   @id @default(uuid())
+  
+  caseId    String
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  role      String   @default("Member")
+  
+  addedAt   DateTime @default(now())
+  
+  @@unique([caseId, userId])
+  @@index([caseId])
+  @@index([userId])
+  @@map("case_members")
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  
+  caseId      String
+  
+  assignedToId String
+  assignedTo   User    @relation(fields: [assignedToId], references: [id])
+  
+  dueDate     DateTime?
+  completedAt DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([assignedToId])
+  @@index([status])
+  @@map("tasks")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model CaseActivity {
+  id          String   @id @default(uuid())
+  
+  type        ActivityType
+  description String
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  mentions    User[]   @relation("ActivityMentions")
+  
+  metadata    Json?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([caseId])
+  @@index([userId])
+  @@index([type])
+  @@map("case_activities")
+}
+
+enum ActivityType {
+  CREATED
+  UPDATED
+  COMMENTED
+  STATUS_CHANGED
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  DOCUMENT_UPLOADED
+  TASK_CREATED
+  TASK_COMPLETED
+}
+
+model Comment {
+  id          String   @id @default(uuid())
+  
+  content     String
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([userId])
+  @@map("comments")
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userEmail String
+  userName  String
+  userRole  UserRole
+  
+  action    ActivityAction
+  entity    String
+  entityId  String?
+  details   String?
+  
+  timestamp DateTime @default(now())
+  
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  ipAddress String?
+  userAgent String?
+  
+  @@index([userId])
+  @@index([firmId])
+  @@index([timestamp])
+  @@index([entity, entityId])
+  @@map("activity_logs")
+}
+
+enum ActivityAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW
+  EXPORT
+  LOGIN
+  LOGOUT
+  PERMISSION_CHANGE
+}
+
+model WorkflowTemplate {
+  id          String   @id @default(uuid())
+  
+  name        String
+  description String?
+  category    String?
+  
+  stages      Json
+  
+  firmId      String
+  firm        Firm     @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  
+  isDefault   Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([firmId])
+  @@map("workflow_templates")
+}
+
+model Milestone {
+  id          String   @id @default(uuid())
+  
+  title       String
+  description String?
+  dueDate     DateTime
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id])
+  
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([ownerId])
+  @@map("milestones")
+}
+
+model Risk {
+  id          String   @id @default(uuid())
+  
+  title       String
+  description String
+  severity    RiskSeverity
+  probability RiskProbability
+  impact      String?
+  mitigation  String?
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  identifiedById String
+  identifiedBy   User  @relation(fields: [identifiedById], references: [id])
+  
+  status      RiskStatus @default(IDENTIFIED)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([severity])
+  @@map("risks")
+}
+
+enum RiskSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RiskProbability {
+  UNLIKELY
+  POSSIBLE
+  LIKELY
+  CERTAIN
+}
+
+enum RiskStatus {
+  IDENTIFIED
+  MITIGATED
+  ACCEPTED
+  RESOLVED
+}
+
+model CustomFieldValue {
+  id          String   @id @default(uuid())
+  
+  fieldName   String
+  fieldValue  String
+  fieldType   String
+  
+  caseId      String
+  case        Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([caseId])
+  @@map("custom_field_values")
+}
