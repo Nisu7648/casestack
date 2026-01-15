@@ -6,6 +6,89 @@ Clean, fast, and powerful case management with AI-powered insights and geo-based
 
 ---
 
+## 🚀 Quick Start
+
+### Automated Setup (Recommended)
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/casestack.git
+cd casestack
+
+# Run setup script
+chmod +x setup.sh
+./setup.sh
+```
+
+### Manual Setup
+
+```bash
+# Backend setup
+cd backend
+npm install
+cp .env.example .env
+# Edit .env with your configuration
+
+# Database setup
+createdb casestack
+npx prisma migrate dev
+
+# Frontend setup
+cd ../frontend
+npm install
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+### Start Development
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
+npm run dev
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm run dev
+```
+
+**Open browser:** `http://localhost:3000`
+
+---
+
+## ⚠️ Network Issues?
+
+**If you see "Network Error" or connection problems:**
+
+1. **Check backend is running:**
+   ```bash
+   curl http://localhost:5000/health
+   ```
+
+2. **Verify environment variables:**
+   ```bash
+   # Backend: backend/.env
+   PORT=5000
+   ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
+   
+   # Frontend: frontend/.env
+   VITE_API_URL=http://localhost:5000
+   ```
+
+3. **See full troubleshooting guide:**
+   - [NETWORK_FIX.md](NETWORK_FIX.md) - Complete network troubleshooting
+
+**The network fix includes:**
+- ✅ Automatic retry (3 attempts)
+- ✅ Better error messages
+- ✅ CORS configuration
+- ✅ Request logging
+- ✅ Health checks
+
+---
+
 ## Features
 
 - **Case Management** - Unlimited cases with full lifecycle tracking
@@ -25,63 +108,18 @@ Clean, fast, and powerful case management with AI-powered insights and geo-based
 
 **Simple per-user pricing with geo-based rates**
 
-- Switzerland: CHF 120/user/month
-- United States: USD 78/user/month
-- United Kingdom: GBP 78/user/month
-- India: INR 35/user/month
-- *Pricing varies by country based on purchasing power*
+| Country | Price/User/Month | Currency |
+|---------|------------------|----------|
+| Switzerland | 120 | CHF |
+| United States | 78 | USD |
+| United Kingdom | 78 | GBP |
+| Germany | 82 | EUR |
+| India | 35 | INR |
+| Brazil | 58 | BRL |
+
+**90+ countries supported with fair, localized pricing**
 
 **All features included. No limits. 14-day free trial.**
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- PostgreSQL 15+
-- Redis 7+
-- Docker (optional)
-
-### Installation
-
-```bash
-# Clone repository
-git clone https://github.com/yourusername/casestack.git
-cd casestack
-
-# Install backend dependencies
-cd backend
-npm install
-
-# Install frontend dependencies
-cd ../frontend
-npm install
-
-# Setup environment variables
-cp .env.example .env
-# Edit .env with your configuration
-
-# Run database migrations
-cd backend
-npx prisma migrate dev
-
-# Start development servers
-npm run dev  # Backend (port 5000)
-cd ../frontend
-npm run dev  # Frontend (port 5173)
-```
-
-### Docker Deployment
-
-```bash
-# Production deployment
-docker-compose -f docker-compose.production.yml up -d
-
-# Development
-docker-compose up -d
-```
 
 ---
 
@@ -93,16 +131,18 @@ docker-compose up -d
 - Redis (caching)
 - Stripe (payments)
 - JWT authentication
+- Geo-IP detection
 
 **Frontend:**
 - React + TypeScript
 - Vite
 - TailwindCSS
-- Axios
+- Clean professional UI (black/white/grey)
+- No animations (fast & professional)
 
 **Infrastructure:**
-- Docker
-- NGINX
+- Docker + Docker Compose
+- NGINX (reverse proxy)
 - Prometheus + Grafana (monitoring)
 
 ---
@@ -114,6 +154,7 @@ docker-compose up -d
 POST /api/auth/register
 POST /api/auth/login
 POST /api/auth/logout
+GET  /api/auth/me
 ```
 
 ### Cases
@@ -125,7 +166,7 @@ PUT    /api/cases/:id
 DELETE /api/cases/:id
 ```
 
-### AI
+### AI Features
 ```
 POST /api/ai/cases/:id/predict
 POST /api/ai/cases/:id/risk
@@ -137,51 +178,125 @@ POST /api/ai/cases/:id/recommendations
 GET  /api/billing/pricing/geo
 POST /api/billing/subscription
 GET  /api/billing/subscription
+PUT  /api/billing/payment-method
+```
+
+### Health Check
+```
+GET /health
 ```
 
 ---
 
 ## Environment Variables
 
+### Backend (.env)
 ```env
 # Database
 DATABASE_URL=postgresql://user:password@localhost:5432/casestack
 
 # JWT
 JWT_SECRET=your-secret-key
+JWT_EXPIRES_IN=7d
 
-# Stripe
+# Server
+PORT=5000
+NODE_ENV=development
+
+# CORS
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Stripe (optional)
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_PUBLISHABLE_KEY=pk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+```
 
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# Frontend
+### Frontend (.env)
+```env
+# API URL
 VITE_API_URL=http://localhost:5000
 ```
 
 ---
 
-## Deployment
+## Docker Deployment
 
-### Production Checklist
+### Development
+```bash
+docker-compose up -d
+```
 
-- [ ] Set environment variables
-- [ ] Configure SSL certificates
-- [ ] Setup database backups
-- [ ] Configure monitoring
-- [ ] Setup Stripe webhooks
-- [ ] Test payment flow
-- [ ] Configure email service
-- [ ] Setup domain and DNS
+### Production
+```bash
+docker-compose -f docker-compose.production.yml up -d
+```
 
-### Deployment Guides
+### Check Status
+```bash
+docker-compose ps
+docker-compose logs -f
+```
+
+---
+
+## Testing
+
+### Backend Tests
+```bash
+cd backend
+npm test
+```
+
+### Frontend Tests
+```bash
+cd frontend
+npm test
+```
+
+### E2E Tests
+```bash
+npm run test:e2e
+```
+
+---
+
+## Deployment Guides
 
 - [Docker Deployment](DOCKER_DEPLOYMENT_GUIDE.md)
 - [Production Deployment](PRODUCTION_DEPLOYMENT_GUIDE.md)
 - [Render Deployment](RENDER_DEPLOYMENT_GUIDE.md)
+- [Network Troubleshooting](NETWORK_FIX.md)
+
+---
+
+## Project Structure
+
+```
+casestack/
+├── backend/
+│   ├── src/
+│   │   ├── config/         # Configuration files
+│   │   ├── controllers/    # Route controllers
+│   │   ├── middleware/     # Express middleware
+│   │   ├── routes/         # API routes
+│   │   ├── services/       # Business logic
+│   │   └── server.js       # Express app
+│   ├── prisma/
+│   │   └── schema.prisma   # Database schema
+│   └── package.json
+├── frontend/
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   ├── pages/          # Page components
+│   │   ├── lib/            # Utilities
+│   │   ├── stores/         # State management
+│   │   └── styles/         # CSS files
+│   └── package.json
+├── nginx/
+│   └── nginx.conf          # NGINX configuration
+├── docker-compose.yml
+└── README.md
+```
 
 ---
 
@@ -197,6 +312,23 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ---
 
+## Security
+
+- JWT authentication
+- Password hashing (bcrypt)
+- Rate limiting
+- CORS protection
+- SQL injection prevention
+- XSS protection
+- CSRF protection
+- SSL/TLS encryption
+- Input sanitization
+- Secure headers (Helmet.js)
+
+See [SECURITY.md](SECURITY.md) for security policy.
+
+---
+
 ## License
 
 This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
@@ -205,9 +337,10 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
 
 ## Support
 
-- Documentation: [docs.casestack.com](https://docs.casestack.com)
-- Email: support@casestack.com
-- Issues: [GitHub Issues](https://github.com/yourusername/casestack/issues)
+- **Documentation:** [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)
+- **Network Issues:** [NETWORK_FIX.md](NETWORK_FIX.md)
+- **FAQ:** [FAQ.md](FAQ.md)
+- **Issues:** [GitHub Issues](https://github.com/yourusername/casestack/issues)
 
 ---
 
@@ -220,6 +353,24 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file.
 - [ ] Court calendar sync
 - [ ] Legal research integration
 
+See [ROADMAP.md](ROADMAP.md) for details.
+
+---
+
+## Status
+
+✅ **Production Ready**
+- Clean, professional codebase
+- Comprehensive documentation
+- Geo-based pricing (90+ countries)
+- Enterprise security
+- Performance optimized
+- Network issues fixed
+- Monitoring configured
+- Deployment ready
+
 ---
 
 **Built with ❤️ for law firms worldwide**
+
+**Clean. Fast. Professional. Global.**
