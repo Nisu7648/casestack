@@ -3,7 +3,7 @@ const router = express.Router();
 
 // ============================================
 // COUNTRY-BASED PRICING API
-// Dynamic pricing based on location
+// Simple monthly pricing - NO DISCOUNTS
 // ============================================
 
 const PRICING_TIERS = [
@@ -118,11 +118,11 @@ router.get('/country/:country', (req, res) => {
 });
 
 // ============================================
-// 3. CALCULATE PRICING
+// 3. CALCULATE PRICING (SIMPLE - NO DISCOUNT)
 // ============================================
 router.post('/calculate', (req, res) => {
   try {
-    const { country, userCount = 1, billingCycle = 'monthly' } = req.body;
+    const { country, userCount = 1 } = req.body;
 
     if (!country) {
       return res.status(400).json({ error: 'Country is required' });
@@ -136,15 +136,9 @@ router.post('/calculate', (req, res) => {
       return res.status(404).json({ error: 'Country not found' });
     }
 
-    // Calculate monthly
+    // Simple monthly calculation
     const monthlyPerUser = pricing.pricePerUser;
     const monthlyTotal = monthlyPerUser * userCount;
-
-    // Calculate yearly (with 15% discount)
-    const yearlyTotal = monthlyTotal * 12;
-    const yearlyDiscount = yearlyTotal * 0.15;
-    const yearlyFinal = yearlyTotal - yearlyDiscount;
-    const yearlyMonthly = yearlyFinal / 12;
 
     res.json({
       success: true,
@@ -152,18 +146,9 @@ router.post('/calculate', (req, res) => {
       currency: pricing.currency,
       symbol: pricing.symbol,
       userCount,
-      monthly: {
-        perUser: monthlyPerUser,
-        total: monthlyTotal,
-        formatted: `${pricing.symbol}${monthlyTotal.toLocaleString()}`
-      },
-      yearly: {
-        perUser: Math.round(yearlyMonthly),
-        total: Math.round(yearlyFinal),
-        discount: Math.round(yearlyDiscount),
-        savings: '15%',
-        formatted: `${pricing.symbol}${Math.round(yearlyFinal).toLocaleString()}`
-      }
+      pricePerUser: monthlyPerUser,
+      monthlyTotal: monthlyTotal,
+      formatted: `${pricing.symbol}${monthlyTotal.toLocaleString()}/month`
     });
   } catch (error) {
     console.error('Calculate pricing error:', error);
@@ -190,21 +175,15 @@ router.post('/compare', (req, res) => {
       if (!pricing) return null;
 
       const monthlyTotal = pricing.pricePerUser * userCount;
-      const yearlyTotal = monthlyTotal * 12;
-      const yearlyDiscount = yearlyTotal * 0.15;
-      const yearlyFinal = yearlyTotal - yearlyDiscount;
 
       return {
         country: pricing.country,
         currency: pricing.currency,
         symbol: pricing.symbol,
         region: pricing.region,
-        monthly: monthlyTotal,
-        yearly: Math.round(yearlyFinal),
-        formatted: {
-          monthly: `${pricing.symbol}${monthlyTotal.toLocaleString()}`,
-          yearly: `${pricing.symbol}${Math.round(yearlyFinal).toLocaleString()}`
-        }
+        pricePerUser: pricing.pricePerUser,
+        monthlyTotal: monthlyTotal,
+        formatted: `${pricing.symbol}${monthlyTotal.toLocaleString()}/month`
       };
     }).filter(Boolean);
 
@@ -285,6 +264,7 @@ router.get('/test', (req, res) => {
     status: 'ok',
     message: 'Pricing API working',
     totalCountries: PRICING_TIERS.length,
+    pricingModel: 'Simple monthly - no discounts',
     timestamp: new Date().toISOString()
   });
 });
