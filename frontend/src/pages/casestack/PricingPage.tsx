@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Check, Globe, TrendingUp, Users, Shield, Zap } from 'lucide-react';
 
 // ============================================
-// COUNTRY-BASED PRICING CONFIGURATION
+// SIMPLE COUNTRY-BASED PRICING
+// Monthly pricing only - NO DISCOUNTS
 // ============================================
 
 interface PricingTier {
@@ -70,10 +71,6 @@ const PRICING_TIERS: PricingTier[] = [
   { country: 'Chile', currency: 'CLP', symbol: 'CLP', pricePerUser: 62000, region: 'Latin America' },
 ];
 
-// ============================================
-// PRICING PAGE COMPONENT
-// ============================================
-
 const PricingPage: React.FC = () => {
   const [selectedCountry, setSelectedCountry] = useState<string>('');
   const [pricing, setPricing] = useState<PricingTier | null>(null);
@@ -101,11 +98,8 @@ const PricingPage: React.FC = () => {
     setPricing(selectedPricing || null);
   };
 
-  // Calculate totals
+  // Calculate total
   const monthlyTotal = pricing ? pricing.pricePerUser * userCount : 0;
-  const yearlyTotal = monthlyTotal * 12;
-  const yearlyDiscount = yearlyTotal * 0.15; // 15% discount
-  const yearlyFinal = yearlyTotal - yearlyDiscount;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -114,13 +108,13 @@ const PricingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center">
             <h1 className="text-5xl font-bold mb-4">
-              Simple, Transparent Pricing
+              Simple, Fair Pricing
             </h1>
             <p className="text-xl text-blue-100 mb-2">
-              Fair pricing based on your location
+              Pay what's fair for your location
             </p>
             <p className="text-lg text-blue-200">
-              Pay in your local currency • Cancel anytime • No hidden fees
+              {pricing?.symbol}{pricing?.pricePerUser.toLocaleString() || '...'} per user per month
             </p>
           </div>
         </div>
@@ -166,7 +160,7 @@ const PricingPage: React.FC = () => {
                   >
                     <div className="font-medium">{tier.country}</div>
                     <div className="text-sm text-gray-600">
-                      {tier.symbol}{tier.pricePerUser.toLocaleString()}/{tier.currency}
+                      {tier.symbol}{tier.pricePerUser.toLocaleString()}/user/month
                     </div>
                   </button>
                 ))}
@@ -207,59 +201,33 @@ const PricingPage: React.FC = () => {
             </div>
 
             {/* Pricing Display */}
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Monthly */}
-              <div className="border-2 border-gray-200 rounded-xl p-6">
-                <div className="text-sm text-gray-500 uppercase tracking-wide mb-2">
+            <div className="border-2 border-blue-600 rounded-xl p-8 bg-blue-50">
+              <div className="text-center">
+                <div className="text-sm text-blue-600 uppercase tracking-wide mb-2 font-semibold">
                   Monthly Plan
                 </div>
-                <div className="text-4xl font-bold text-gray-900 mb-4">
+                <div className="text-6xl font-bold text-gray-900 mb-4">
                   {pricing.symbol}{monthlyTotal.toLocaleString()}
-                  <span className="text-lg text-gray-500 font-normal">/month</span>
                 </div>
-                <div className="space-y-2 text-sm text-gray-600">
-                  <div className="flex justify-between">
-                    <span>{pricing.symbol}{pricing.pricePerUser.toLocaleString()} × {userCount} users</span>
-                    <span className="font-medium">{pricing.symbol}{monthlyTotal.toLocaleString()}</span>
+                <div className="text-xl text-gray-600 mb-6">
+                  per month for {userCount} {userCount === 1 ? 'user' : 'users'}
+                </div>
+                <div className="space-y-2 text-sm text-gray-600 mb-6">
+                  <div className="flex justify-between max-w-md mx-auto">
+                    <span>Price per user:</span>
+                    <span className="font-medium">{pricing.symbol}{pricing.pricePerUser.toLocaleString()}</span>
                   </div>
-                </div>
-                <button className="w-full mt-6 bg-gray-100 text-gray-900 py-3 rounded-lg font-medium hover:bg-gray-200 transition-colors">
-                  Choose Monthly
-                </button>
-              </div>
-
-              {/* Yearly (with discount) */}
-              <div className="border-2 border-blue-600 rounded-xl p-6 relative bg-blue-50">
-                <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                  SAVE 15%
-                </div>
-                <div className="text-sm text-blue-600 uppercase tracking-wide mb-2 font-semibold">
-                  Yearly Plan (Best Value)
-                </div>
-                <div className="text-4xl font-bold text-gray-900 mb-4">
-                  {pricing.symbol}{Math.round(yearlyFinal / 12).toLocaleString()}
-                  <span className="text-lg text-gray-500 font-normal">/month</span>
-                </div>
-                <div className="space-y-2 text-sm text-gray-600 mb-4">
-                  <div className="flex justify-between">
-                    <span>Monthly cost</span>
+                  <div className="flex justify-between max-w-md mx-auto">
+                    <span>Number of users:</span>
+                    <span className="font-medium">{userCount}</span>
+                  </div>
+                  <div className="flex justify-between max-w-md mx-auto pt-2 border-t text-lg font-bold text-gray-900">
+                    <span>Total per month:</span>
                     <span>{pricing.symbol}{monthlyTotal.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Yearly total</span>
-                    <span className="line-through">{pricing.symbol}{yearlyTotal.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-green-600 font-medium">
-                    <span>You save</span>
-                    <span>-{pricing.symbol}{Math.round(yearlyDiscount).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-lg font-bold text-gray-900 pt-2 border-t">
-                    <span>Billed yearly</span>
-                    <span>{pricing.symbol}{Math.round(yearlyFinal).toLocaleString()}</span>
-                  </div>
                 </div>
-                <button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg">
-                  Choose Yearly (Save 15%)
+                <button className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-12 py-4 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg text-lg">
+                  Get Started
                 </button>
               </div>
             </div>
@@ -295,16 +263,16 @@ const PricingPage: React.FC = () => {
           </div>
         </div>
 
-        {/* FAQ */}
+        {/* CTA */}
         <div className="mt-12 text-center">
           <h3 className="text-2xl font-bold text-gray-900 mb-4">
-            Questions about pricing?
+            Ready to get started?
           </h3>
           <p className="text-gray-600 mb-6">
-            Contact our sales team for custom enterprise pricing
+            Start your free 14-day trial today. No credit card required.
           </p>
-          <button className="bg-white text-blue-600 px-8 py-3 rounded-lg font-medium border-2 border-blue-600 hover:bg-blue-50 transition-colors">
-            Contact Sales
+          <button className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg">
+            Start Free Trial
           </button>
         </div>
       </div>
