@@ -1,0 +1,464 @@
+// ============================================
+// LEGAL CASE MANAGEMENT SYSTEM
+// For Law Firms - Compete with MyCase & Clio
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// FIRM & USERS
+// ============================================
+
+model LawFirm {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  
+  // Billing
+  subscriptionTier String @default("BASIC") // BASIC, PRO, ENTERPRISE
+  billingEmail  String?
+  
+  // Settings
+  practiceAreas String[] // Family, Criminal, Personal Injury, etc.
+  timezone      String   @default("America/New_York")
+  
+  // Relationships
+  users         User[]
+  clients       Client[]
+  cases         LegalCase[]
+  documents     Document[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([slug])
+  @@map("law_firms")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  
+  // Profile
+  firstName     String
+  lastName      String
+  barNumber     String?  // Attorney bar number
+  phone         String?
+  
+  // Firm
+  lawFirmId     String
+  lawFirm       LawFirm  @relation(fields: [lawFirmId], references: [id], onDelete: Cascade)
+  
+  // Role
+  role          UserRole @default(ATTORNEY)
+  
+  // Relationships
+  casesAssigned LegalCase[] @relation("AssignedAttorney")
+  timeEntries   TimeEntry[]
+  notes         Note[]
+  tasks         Task[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginAt   DateTime?
+  
+  @@index([lawFirmId])
+  @@index([email])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN          // Firm admin
+  ATTORNEY       // Lawyer
+  PARALEGAL      // Paralegal
+  STAFF          // Support staff
+}
+
+// ============================================
+// CLIENTS
+// ============================================
+
+model Client {
+  id            String   @id @default(cuid())
+  
+  // Personal Info
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  
+  // Firm
+  lawFirmId     String
+  lawFirm       LawFirm  @relation(fields: [lawFirmId], references: [id], onDelete: Cascade)
+  
+  // Client Type
+  clientType    ClientType @default(INDIVIDUAL)
+  companyName   String?    // If BUSINESS
+  
+  // Status
+  status        ClientStatus @default(ACTIVE)
+  
+  // Relationships
+  cases         LegalCase[]
+  documents     Document[]
+  notes         Note[]
+  
+  // Metadata
+  metadata      Json?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([lawFirmId])
+  @@index([lastName, firstName])
+  @@index([email])
+  @@map("clients")
+}
+
+enum ClientType {
+  INDIVIDUAL
+  BUSINESS
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+// ============================================
+// LEGAL CASES
+// ============================================
+
+model LegalCase {
+  id            String   @id @default(cuid())
+  
+  // Case Info
+  caseNumber    String   @unique  // Auto-generated: CASE-2024-001
+  title         String
+  description   String?  @db.Text
+  
+  // Client
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  // Firm
+  lawFirmId     String
+  lawFirm       LawFirm  @relation(fields: [lawFirmId], references: [id], onDelete: Cascade)
+  
+  // Assignment
+  assignedToId  String
+  assignedTo    User     @relation("AssignedAttorney", fields: [assignedToId], references: [id])
+  
+  // Case Details
+  practiceArea  String   // Family Law, Criminal Defense, etc.
+  caseType      String?  // Divorce, DUI, Personal Injury, etc.
+  courtName     String?
+  judgeAssigned String?
+  opposingParty String?
+  opposingCounsel String?
+  
+  // Status
+  status        CaseStatus @default(OPEN)
+  priority      CasePriority @default(MEDIUM)
+  
+  // Dates
+  filingDate    DateTime?
+  trialDate     DateTime?
+  closedDate    DateTime?
+  
+  // Financial
+  billingType   BillingType @default(HOURLY)
+  hourlyRate    Float?
+  flatFee       Float?
+  retainerAmount Float?
+  
+  // Relationships
+  documents     Document[]
+  events        CalendarEvent[]
+  tasks         Task[]
+  timeEntries   TimeEntry[]
+  notes         Note[]
+  
+  // Metadata
+  metadata      Json?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([lawFirmId])
+  @@index([clientId])
+  @@index([assignedToId])
+  @@index([caseNumber])
+  @@index([status])
+  @@map("legal_cases")
+}
+
+enum CaseStatus {
+  OPEN
+  ACTIVE
+  PENDING
+  SETTLED
+  CLOSED
+  ARCHIVED
+}
+
+enum CasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum BillingType {
+  HOURLY
+  FLAT_FEE
+  CONTINGENCY
+  RETAINER
+}
+
+// ============================================
+// DOCUMENTS
+// ============================================
+
+model Document {
+  id            String   @id @default(cuid())
+  
+  // File Info
+  fileName      String
+  fileType      String   // pdf, docx, jpg, etc.
+  fileSize      Int      // bytes
+  filePath      String   // S3/storage path
+  
+  // Document Type
+  documentType  DocumentType
+  category      String?  // Pleading, Evidence, Correspondence, etc.
+  
+  // Associations
+  lawFirmId     String
+  lawFirm       LawFirm  @relation(fields: [lawFirmId], references: [id], onDelete: Cascade)
+  
+  clientId      String?
+  client        Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  
+  caseId        String?
+  case          LegalCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  
+  // Content Analysis
+  extractedText String?  @db.Text
+  ocrProcessed  Boolean  @default(false)
+  
+  // AI Analysis
+  aiSummary     String?  @db.Text
+  keyDates      Json?    // Extracted dates
+  keyParties    Json?    // Extracted names
+  keyTerms      Json?    // Important legal terms
+  
+  // Metadata
+  tags          String[]
+  metadata      Json?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([lawFirmId])
+  @@index([clientId])
+  @@index([caseId])
+  @@index([documentType])
+  @@map("documents")
+}
+
+enum DocumentType {
+  PLEADING       // Court filings
+  MOTION         // Motions
+  BRIEF          // Legal briefs
+  EVIDENCE       // Evidence documents
+  CORRESPONDENCE // Letters, emails
+  CONTRACT       // Contracts
+  DISCOVERY      // Discovery documents
+  COURT_ORDER    // Court orders
+  OTHER          // Other documents
+}
+
+// ============================================
+// CALENDAR & DEADLINES
+// ============================================
+
+model CalendarEvent {
+  id            String   @id @default(cuid())
+  
+  // Event Info
+  title         String
+  description   String?  @db.Text
+  location      String?
+  
+  // Timing
+  startTime     DateTime
+  endTime       DateTime
+  allDay        Boolean  @default(false)
+  
+  // Type
+  eventType     EventType
+  
+  // Case Association
+  caseId        String?
+  case          LegalCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Reminders
+  reminderSet   Boolean  @default(false)
+  reminderTime  DateTime?
+  
+  // Metadata
+  metadata      Json?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([startTime])
+  @@map("calendar_events")
+}
+
+enum EventType {
+  COURT_HEARING
+  DEPOSITION
+  MEETING
+  DEADLINE
+  FILING_DEADLINE
+  DISCOVERY_DEADLINE
+  TRIAL
+  MEDIATION
+  ARBITRATION
+  OTHER
+}
+
+// ============================================
+// TASKS & WORKFLOW
+// ============================================
+
+model Task {
+  id            String   @id @default(cuid())
+  
+  // Task Info
+  title         String
+  description   String?  @db.Text
+  
+  // Assignment
+  assignedToId  String
+  assignedTo    User     @relation(fields: [assignedToId], references: [id])
+  
+  // Case Association
+  caseId        String?
+  case          LegalCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Status
+  status        TaskStatus @default(TODO)
+  priority      TaskPriority @default(MEDIUM)
+  
+  // Timing
+  dueDate       DateTime?
+  completedAt   DateTime?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([assignedToId])
+  @@index([caseId])
+  @@index([status])
+  @@map("tasks")
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// ============================================
+// TIME TRACKING & BILLING
+// ============================================
+
+model TimeEntry {
+  id            String   @id @default(cuid())
+  
+  // Time Info
+  description   String   @db.Text
+  hours         Float
+  date          DateTime
+  
+  // User
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  
+  // Case
+  caseId        String
+  case          LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Billing
+  hourlyRate    Float
+  amount        Float    // hours * hourlyRate
+  billable      Boolean  @default(true)
+  invoiced      Boolean  @default(false)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([caseId])
+  @@index([date])
+  @@map("time_entries")
+}
+
+// ============================================
+// NOTES
+// ============================================
+
+model Note {
+  id            String   @id @default(cuid())
+  
+  // Content
+  title         String?
+  content       String   @db.Text
+  
+  // Author
+  authorId      String
+  author        User     @relation(fields: [authorId], references: [id])
+  
+  // Associations
+  clientId      String?
+  client        Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  
+  caseId        String?
+  case          LegalCase? @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  tags          String[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([authorId])
+  @@index([clientId])
+  @@index([caseId])
+  @@map("notes")
+}
