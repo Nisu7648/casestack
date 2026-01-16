@@ -69,11 +69,11 @@ app.get('/', (req, res) => {
       'POST /api/auth/register',
       'POST /api/auth/login',
       'GET /api/auth/verify',
-      'GET /api/auth/test',
       'POST /api/firm/create',
       'GET /api/firm/details',
-      'PUT /api/firm/update',
-      'GET /api/firm/test'
+      'GET /api/pricing/countries',
+      'GET /api/pricing/country/:country',
+      'POST /api/pricing/calculate'
     ]
   });
 });
@@ -98,6 +98,15 @@ try {
   console.log('✅ Loaded: /api/firm (simple)');
 } catch (e) {
   console.error('❌ Failed to load firm routes:', e.message);
+}
+
+// Pricing routes (NEW)
+try {
+  const pricingRoutes = require('./routes/casestack/pricing');
+  app.use('/api/pricing', pricingRoutes);
+  console.log('✅ Loaded: /api/pricing');
+} catch (e) {
+  console.error('❌ Failed to load pricing routes:', e.message);
 }
 
 // Google auth routes
@@ -151,7 +160,10 @@ app.use((req, res) => {
       'POST /api/auth/login',
       'GET /api/auth/verify',
       'POST /api/firm/create',
-      'GET /api/firm/details'
+      'GET /api/firm/details',
+      'GET /api/pricing/countries',
+      'GET /api/pricing/country/:country',
+      'POST /api/pricing/calculate'
     ]
   });
 });
@@ -189,6 +201,7 @@ app.listen(PORT, HOST, () => {
   console.log('');
   console.log('📊 Features: 16 advanced features');
   console.log('📊 Endpoints: 67+ API endpoints');
+  console.log('💰 Pricing: 40+ countries supported');
   console.log('');
   console.log('🔥 Ready to accept requests!');
   console.log('🚀 ============================================');
