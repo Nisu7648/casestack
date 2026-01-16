@@ -1,0 +1,340 @@
+// ============================================
+// CASE STORAGE & ANALYSIS SYSTEM
+// Parallel Implementation - Clean Architecture
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE ENTITIES
+// ============================================
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  
+  // Settings
+  settings    Json?
+  
+  // Relationships
+  users       User[]
+  cases       Case[]
+  tags        Tag[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([slug])
+  @@map("organizations")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  
+  // Organization
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Permissions
+  role          UserRole @default(MEMBER)
+  
+  // Relationships
+  casesCreated  Case[]   @relation("CaseCreator")
+  analyses      Analysis[]
+  comments      Comment[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginAt   DateTime?
+  
+  @@index([organizationId])
+  @@index([email])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// ============================================
+// CASE STORAGE
+// ============================================
+
+model Case {
+  id            String   @id @default(cuid())
+  
+  // Core Info
+  title         String
+  description   String?  @db.Text
+  caseNumber    String   @unique
+  
+  // Organization
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Creator
+  createdById   String
+  createdBy     User     @relation("CaseCreator", fields: [createdById], references: [id])
+  
+  // Status
+  status        CaseStatus @default(OPEN)
+  priority      CasePriority @default(MEDIUM)
+  
+  // Categorization
+  category      String?
+  tags          CaseTag[]
+  
+  // Metadata
+  metadata      Json?
+  
+  // Relationships
+  documents     Document[]
+  analyses      Analysis[]
+  timeline      TimelineEvent[]
+  comments      Comment[]
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  closedAt      DateTime?
+  
+  @@index([organizationId])
+  @@index([createdById])
+  @@index([status])
+  @@index([caseNumber])
+  @@map("cases")
+}
+
+enum CaseStatus {
+  OPEN
+  IN_PROGRESS
+  UNDER_REVIEW
+  CLOSED
+  ARCHIVED
+}
+
+enum CasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// ============================================
+// DOCUMENT STORAGE
+// ============================================
+
+model Document {
+  id            String   @id @default(cuid())
+  
+  // File Info
+  fileName      String
+  fileType      String
+  fileSize      Int
+  filePath      String   // S3/Storage path
+  
+  // Content
+  extractedText String?  @db.Text
+  
+  // Case Association
+  caseId        String
+  case          Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  metadata      Json?
+  
+  // Analysis
+  analyses      DocumentAnalysis[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([caseId])
+  @@map("documents")
+}
+
+// ============================================
+// ANALYSIS ENGINE
+// ============================================
+
+model Analysis {
+  id            String   @id @default(cuid())
+  
+  // Type
+  type          AnalysisType
+  
+  // Case Association
+  caseId        String
+  case          Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Analyst
+  analystId     String
+  analyst       User     @relation(fields: [analystId], references: [id])
+  
+  // Content
+  title         String
+  content       String   @db.Text
+  findings      Json?
+  
+  // Status
+  status        AnalysisStatus @default(DRAFT)
+  
+  // Relationships
+  documents     DocumentAnalysis[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  publishedAt   DateTime?
+  
+  @@index([caseId])
+  @@index([analystId])
+  @@index([type])
+  @@map("analyses")
+}
+
+enum AnalysisType {
+  PRELIMINARY
+  DETAILED
+  FORENSIC
+  COMPARATIVE
+  SUMMARY
+}
+
+enum AnalysisStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+model DocumentAnalysis {
+  id            String   @id @default(cuid())
+  
+  documentId    String
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  
+  analysisId    String
+  analysis      Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  
+  // Analysis Data
+  highlights    Json?
+  notes         String?  @db.Text
+  
+  createdAt     DateTime @default(now())
+  
+  @@unique([documentId, analysisId])
+  @@index([documentId])
+  @@index([analysisId])
+  @@map("document_analyses")
+}
+
+// ============================================
+// TIMELINE & EVENTS
+// ============================================
+
+model TimelineEvent {
+  id            String   @id @default(cuid())
+  
+  // Case Association
+  caseId        String
+  case          Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Event Info
+  title         String
+  description   String?  @db.Text
+  eventDate     DateTime
+  eventType     String?
+  
+  // Metadata
+  metadata      Json?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([eventDate])
+  @@map("timeline_events")
+}
+
+// ============================================
+// COLLABORATION
+// ============================================
+
+model Comment {
+  id            String   @id @default(cuid())
+  
+  // Case Association
+  caseId        String
+  case          Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  // Author
+  authorId      String
+  author        User     @relation(fields: [authorId], references: [id])
+  
+  // Content
+  content       String   @db.Text
+  
+  // Threading
+  parentId      String?
+  parent        Comment? @relation("CommentThread", fields: [parentId], references: [id])
+  replies       Comment[] @relation("CommentThread")
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([caseId])
+  @@index([authorId])
+  @@map("comments")
+}
+
+// ============================================
+// TAGGING SYSTEM
+// ============================================
+
+model Tag {
+  id            String   @id @default(cuid())
+  
+  name          String
+  color         String?
+  
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  cases         CaseTag[]
+  
+  createdAt     DateTime @default(now())
+  
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("tags")
+}
+
+model CaseTag {
+  id            String   @id @default(cuid())
+  
+  caseId        String
+  case          Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  
+  tagId         String
+  tag           Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime @default(now())
+  
+  @@unique([caseId, tagId])
+  @@index([caseId])
+  @@index([tagId])
+  @@map("case_tags")
+}
