@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Users, Mail, Check, ArrowRight, Sparkles, Shield, Zap, Lock, User } from 'lucide-react';
+import { Building2, Mail, Lock, User, ArrowRight, Check, Sparkles, Shield, Zap, TrendingUp, Users, Globe, Eye, EyeOff } from 'lucide-react';
 
 // ============================================
-// SIMPLE SIGNUP & LOGIN - NO PRICING
-// Fixed network error with full API URL
+// MODERN SPLIT-SCREEN LOGIN/SIGNUP
+// Beautiful animations, smooth transitions
 // ============================================
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://casestack-backend.onrender.com';
@@ -16,6 +16,7 @@ export default function FirmSetupProfessional() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [user, setUser] = useState<any>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Auth form data
   const [authData, setAuthData] = useState({
@@ -35,7 +36,6 @@ export default function FirmSetupProfessional() {
   });
 
   useEffect(() => {
-    // Check if user is already logged in
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
     
@@ -43,7 +43,6 @@ export default function FirmSetupProfessional() {
       const parsedUser = JSON.parse(userData);
       setUser(parsedUser);
       
-      // Check if user already has a firm
       if (parsedUser.firmId) {
         navigate('/dashboard');
       } else {
@@ -61,8 +60,6 @@ export default function FirmSetupProfessional() {
     setError('');
 
     try {
-      console.log('Signing up with:', { email: authData.email, firstName: authData.firstName });
-
       const response = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 
@@ -77,22 +74,17 @@ export default function FirmSetupProfessional() {
         })
       });
 
-      console.log('Response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Signup failed');
       }
 
       const data = await response.json();
-      console.log('Signup successful:', data);
-
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       setUser(data.user);
       setStep('firm');
     } catch (error: any) {
-      console.error('Signup error:', error);
       setError(error.message || 'Signup failed. Please try again.');
     } finally {
       setLoading(false);
@@ -108,8 +100,6 @@ export default function FirmSetupProfessional() {
     setError('');
 
     try {
-      console.log('Logging in with:', { email: authData.email });
-
       const response = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 
@@ -122,16 +112,12 @@ export default function FirmSetupProfessional() {
         })
       });
 
-      console.log('Response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Login failed');
       }
 
       const data = await response.json();
-      console.log('Login successful:', data);
-
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       setUser(data.user);
@@ -142,7 +128,6 @@ export default function FirmSetupProfessional() {
         setStep('firm');
       }
     } catch (error: any) {
-      console.error('Login error:', error);
       setError(error.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
@@ -159,8 +144,6 @@ export default function FirmSetupProfessional() {
 
     try {
       const token = localStorage.getItem('token');
-      
-      console.log('Creating firm with:', firmData);
 
       const response = await fetch(`${API_URL}/api/firm/create`, {
         method: 'POST',
@@ -172,24 +155,18 @@ export default function FirmSetupProfessional() {
         body: JSON.stringify(firmData)
       });
 
-      console.log('Response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to create firm');
       }
 
       const data = await response.json();
-      console.log('Firm created:', data);
-
-      // Update user data
       const updatedUser = { ...user, firmId: data.firm.id };
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setUser(updatedUser);
       
       setStep('complete');
     } catch (error: any) {
-      console.error('Create firm error:', error);
       setError(error.message || 'Failed to create firm. Please try again.');
     } finally {
       setLoading(false);
@@ -197,135 +174,247 @@ export default function FirmSetupProfessional() {
   };
 
   // ============================================
-  // AUTH STEP (LOGIN/SIGNUP)
+  // AUTH STEP - MODERN SPLIT SCREEN
   // ============================================
   if (step === 'auth') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mb-4">
-              <Building2 className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              Welcome to CASESTACK
-            </h1>
-            <p className="text-gray-600">
-              {authMode === 'signup' ? 'Create your account to get started' : 'Sign in to your account'}
-            </p>
+      <div className="min-h-screen flex">
+        {/* LEFT SIDE - BRANDING */}
+        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 p-12 flex-col justify-between relative overflow-hidden">
+          {/* Animated background elements */}
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute top-20 left-20 w-72 h-72 bg-white rounded-full blur-3xl animate-pulse"></div>
+            <div className="absolute bottom-20 right-20 w-96 h-96 bg-white rounded-full blur-3xl animate-pulse delay-1000"></div>
           </div>
 
-          {/* Auth Form */}
-          <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="relative z-10">
+            {/* Logo */}
+            <div className="flex items-center gap-3 mb-12">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                <Building2 className="w-7 h-7 text-white" />
+              </div>
+              <span className="text-3xl font-bold text-white">CASESTACK</span>
+            </div>
+
+            {/* Main message */}
+            <div className="space-y-6">
+              <h1 className="text-5xl font-bold text-white leading-tight">
+                Modern Case<br />Management<br />for Professionals
+              </h1>
+              <p className="text-xl text-white/90 max-w-md">
+                Streamline your workflow with AI-powered tools designed for accounting firms and legal practices.
+              </p>
+            </div>
+          </div>
+
+          {/* Features */}
+          <div className="relative z-10 grid grid-cols-2 gap-6">
+            {[
+              { icon: Zap, text: 'Lightning Fast' },
+              { icon: Shield, text: 'Bank-Level Security' },
+              { icon: Users, text: 'Team Collaboration' },
+              { icon: TrendingUp, text: 'Real-time Analytics' }
+            ].map((feature, idx) => (
+              <div key={idx} className="flex items-center gap-3 text-white/90">
+                <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                  <feature.icon className="w-5 h-5" />
+                </div>
+                <span className="font-medium">{feature.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* RIGHT SIDE - AUTH FORM */}
+        <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gray-50">
+          <div className="w-full max-w-md">
+            {/* Mobile Logo */}
+            <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+                <Building2 className="w-7 h-7 text-white" />
+              </div>
+              <span className="text-2xl font-bold text-gray-900">CASESTACK</span>
+            </div>
+
+            {/* Auth Mode Toggle */}
+            <div className="flex gap-2 mb-8 bg-white rounded-xl p-1 shadow-sm">
+              <button
+                onClick={() => {
+                  setAuthMode('signup');
+                  setError('');
+                }}
+                className={`flex-1 py-3 rounded-lg font-medium transition-all ${
+                  authMode === 'signup'
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Sign Up
+              </button>
+              <button
+                onClick={() => {
+                  setAuthMode('login');
+                  setError('');
+                }}
+                className={`flex-1 py-3 rounded-lg font-medium transition-all ${
+                  authMode === 'login'
+                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Sign In
+              </button>
+            </div>
+
+            {/* Welcome Text */}
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                {authMode === 'signup' ? 'Create Account' : 'Welcome Back'}
+              </h2>
+              <p className="text-gray-600">
+                {authMode === 'signup' 
+                  ? 'Start your 14-day free trial today' 
+                  : 'Sign in to continue to your dashboard'}
+              </p>
+            </div>
+
+            {/* Error Message */}
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {error}
+              <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
+                <p className="text-red-700 text-sm font-medium">{error}</p>
               </div>
             )}
 
-            <form onSubmit={authMode === 'signup' ? handleSignUp : handleLogin}>
+            {/* Auth Form */}
+            <form onSubmit={authMode === 'signup' ? handleSignUp : handleLogin} className="space-y-5">
               {authMode === 'signup' && (
-                <>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        First Name
-                      </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      First Name
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <input
                         type="text"
                         required
                         value={authData.firstName}
                         onChange={(e) => setAuthData({ ...authData, firstName: e.target.value })}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="John"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Last Name
-                      </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Last Name
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <input
                         type="text"
                         required
                         value={authData.lastName}
                         onChange={(e) => setAuthData({ ...authData, lastName: e.target.value })}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         placeholder="Doe"
                       />
                     </div>
                   </div>
-                </>
+                </div>
               )}
 
-              <div className="mb-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address
                 </label>
-                <input
-                  type="email"
-                  required
-                  value={authData.email}
-                  onChange={(e) => setAuthData({ ...authData, email: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="you@example.com"
-                />
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="email"
+                    required
+                    value={authData.email}
+                    onChange={(e) => setAuthData({ ...authData, email: e.target.value })}
+                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="you@company.com"
+                  />
+                </div>
               </div>
 
-              <div className="mb-6">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Password
                 </label>
-                <input
-                  type="password"
-                  required
-                  value={authData.password}
-                  onChange={(e) => setAuthData({ ...authData, password: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="••••••••"
-                  minLength={6}
-                />
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={authData.password}
+                    onChange={(e) => setAuthData({ ...authData, password: e.target.value })}
+                    className="w-full pl-11 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="••••••••"
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                {authMode === 'signup' && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Must be at least 6 characters
+                  </p>
+                )}
               </div>
+
+              {authMode === 'login' && (
+                <div className="flex items-center justify-between text-sm">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" />
+                    <span className="text-gray-600">Remember me</span>
+                  </label>
+                  <a href="#" className="text-blue-600 hover:text-blue-700 font-medium">
+                    Forgot password?
+                  </a>
+                </div>
+              )}
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3.5 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
               >
-                {loading ? 'Please wait...' : authMode === 'signup' ? 'Create Account' : 'Sign In'}
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Please wait...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{authMode === 'signup' ? 'Create Account' : 'Sign In'}</span>
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
               </button>
             </form>
 
-            {/* Toggle Auth Mode */}
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => {
-                  setAuthMode(authMode === 'signup' ? 'login' : 'signup');
-                  setError('');
-                }}
-                className="text-blue-600 hover:text-blue-700 font-medium"
-              >
-                {authMode === 'signup' 
-                  ? 'Already have an account? Sign in' 
-                  : "Don't have an account? Sign up"}
-              </button>
-            </div>
-          </div>
-
-          {/* Features */}
-          <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-            <div>
-              <Shield className="w-6 h-6 text-blue-600 mx-auto mb-2" />
-              <p className="text-xs text-gray-600">Secure</p>
-            </div>
-            <div>
-              <Zap className="w-6 h-6 text-purple-600 mx-auto mb-2" />
-              <p className="text-xs text-gray-600">Fast</p>
-            </div>
-            <div>
-              <Sparkles className="w-6 h-6 text-pink-600 mx-auto mb-2" />
-              <p className="text-xs text-gray-600">AI-Powered</p>
-            </div>
+            {/* Social proof */}
+            {authMode === 'signup' && (
+              <div className="mt-8 pt-8 border-t border-gray-200">
+                <p className="text-center text-sm text-gray-600 mb-4">
+                  Trusted by 1,000+ firms worldwide
+                </p>
+                <div className="flex justify-center gap-8 opacity-50">
+                  <div className="text-2xl font-bold text-gray-400">ACME</div>
+                  <div className="text-2xl font-bold text-gray-400">CORP</div>
+                  <div className="text-2xl font-bold text-gray-400">LEGAL</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -338,83 +427,102 @@ export default function FirmSetupProfessional() {
   if (step === 'firm') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
-        <div className="max-w-2xl w-full">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mb-4">
-              <Building2 className="w-8 h-8 text-white" />
+        <div className="max-w-3xl w-full">
+          {/* Progress */}
+          <div className="mb-8">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">
+                <Check className="w-5 h-5" />
+              </div>
+              <div className="w-16 h-1 bg-blue-600"></div>
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
+                2
+              </div>
+              <div className="w-16 h-1 bg-gray-300"></div>
+              <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-gray-500 font-bold">
+                3
+              </div>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              Setup Your Firm
-            </h1>
-            <p className="text-gray-600">
-              Tell us about your firm to get started
-            </p>
+            <p className="text-center text-gray-600">Step 2 of 3: Setup Your Firm</p>
           </div>
 
-          {/* Firm Form */}
-          <div className="bg-white rounded-2xl shadow-xl p-8">
+          {/* Form Card */}
+          <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mb-4">
+                <Building2 className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                Tell Us About Your Firm
+              </h1>
+              <p className="text-gray-600">
+                This helps us personalize your experience
+              </p>
+            </div>
+
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {error}
+              <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
+                <p className="text-red-700 text-sm font-medium">{error}</p>
               </div>
             )}
 
-            <form onSubmit={handleCreateFirm}>
-              <div className="mb-6">
+            <form onSubmit={handleCreateFirm} className="space-y-6">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Firm Name *
+                  Firm Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={firmData.name}
                   onChange={(e) => setFirmData({ ...firmData, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   placeholder="Acme Accounting LLP"
                 />
               </div>
 
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={firmData.email}
-                  onChange={(e) => setFirmData({ ...firmData, email: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="contact@acme.com"
-                />
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={firmData.email}
+                    onChange={(e) => setFirmData({ ...firmData, email: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="contact@acme.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={firmData.phone}
+                    onChange={(e) => setFirmData({ ...firmData, phone: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="+1 (555) 123-4567"
+                  />
+                </div>
               </div>
 
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={firmData.phone}
-                  onChange={(e) => setFirmData({ ...firmData, phone: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="+1 (555) 123-4567"
-                />
-              </div>
-
-              <div className="mb-6">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Address
                 </label>
                 <textarea
                   value={firmData.address}
                   onChange={(e) => setFirmData({ ...firmData, address: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="123 Main St, City, Country"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="123 Main Street, City, Country"
                   rows={3}
                 />
               </div>
 
-              <div className="mb-6">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Website
                 </label>
@@ -422,7 +530,7 @@ export default function FirmSetupProfessional() {
                   type="url"
                   value={firmData.website}
                   onChange={(e) => setFirmData({ ...firmData, website: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   placeholder="https://acme.com"
                 />
               </div>
@@ -430,11 +538,16 @@ export default function FirmSetupProfessional() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
               >
-                {loading ? 'Creating...' : (
+                {loading ? (
                   <>
-                    Create Firm
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Creating...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Continue</span>
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}
@@ -452,22 +565,46 @@ export default function FirmSetupProfessional() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full text-center">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mb-6">
-          <Check className="w-10 h-10 text-white" />
+        {/* Success Animation */}
+        <div className="relative mb-8">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-32 h-32 bg-green-500 rounded-full opacity-20 animate-ping"></div>
+          </div>
+          <div className="relative inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full shadow-2xl">
+            <Check className="w-12 h-12 text-white" />
+          </div>
         </div>
+
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
-          All Set! 🎉
+          You're All Set! 🎉
         </h1>
         <p className="text-xl text-gray-600 mb-8">
-          Your firm has been created successfully
+          Your firm has been created successfully.<br />
+          Let's start managing your cases!
         </p>
+
         <button
           onClick={() => navigate('/dashboard')}
-          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all inline-flex items-center gap-2"
+          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl inline-flex items-center gap-2"
         >
-          Go to Dashboard
+          <span>Go to Dashboard</span>
           <ArrowRight className="w-5 h-5" />
         </button>
+
+        <div className="mt-12 grid grid-cols-3 gap-4 text-center">
+          <div>
+            <Sparkles className="w-8 h-8 text-purple-600 mx-auto mb-2" />
+            <p className="text-xs text-gray-600">AI-Powered</p>
+          </div>
+          <div>
+            <Shield className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+            <p className="text-xs text-gray-600">Secure</p>
+          </div>
+          <div>
+            <Zap className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+            <p className="text-xs text-gray-600">Fast</p>
+          </div>
+        </div>
       </div>
     </div>
   );
