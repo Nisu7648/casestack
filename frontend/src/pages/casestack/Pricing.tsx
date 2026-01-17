@@ -1,132 +1,105 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Globe, Users, Database, Zap, Shield, TrendingUp, ArrowRight, Sparkles } from 'lucide-react';
+import { Check, Globe, Users, Database, Zap, Shield, TrendingUp, ArrowRight, Sparkles, Crown } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://casestack-backend.onrender.com';
 
-// Country list with codes
-const COUNTRIES = [
-  { code: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
-  { code: 'AU', name: 'Australia', flag: '🇦🇺' },
-  { code: 'IN', name: 'India', flag: '🇮🇳' },
-  { code: 'DE', name: 'Germany', flag: '🇩🇪' },
-  { code: 'FR', name: 'France', flag: '🇫🇷' },
-  { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
-  { code: 'AE', name: 'UAE', flag: '🇦🇪' },
-  { code: 'NZ', name: 'New Zealand', flag: '🇳🇿' }
-];
+interface Country {
+  code: string;
+  country: string;
+  currency: string;
+  symbol: string;
+  price: number;
+}
 
 interface Plan {
   id: string;
   name: string;
-  maxUsers: number;
-  maxCases: number;
-  maxStorage: number;
+  description: string;
   features: string[];
+  limits: {
+    users: number;
+    cases: number;
+    storage: number;
+  };
 }
 
 export default function Pricing() {
   const navigate = useNavigate();
-  const [selectedCountry, setSelectedCountry] = useState('US');
+  const [selectedCountry, setSelectedCountry] = useState('GB');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [userCount, setUserCount] = useState(5);
-  const [plans, setPlans] = useState<Record<string, Plan>>({});
-  const [pricing, setPricing] = useState<any>(null);
-  const [calculations, setCalculations] = useState<Record<string, any>>({});
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [calculation, setCalculation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch plans
+  // Fetch plan and countries
   useEffect(() => {
-    fetchPlans();
+    fetchPlan();
+    fetchCountries();
   }, []);
 
-  // Fetch pricing when country changes
+  // Calculate cost when inputs change
   useEffect(() => {
     if (selectedCountry) {
-      fetchPricing();
+      calculateCost();
     }
-  }, [selectedCountry]);
+  }, [selectedCountry, billingCycle]);
 
-  // Calculate costs when inputs change
-  useEffect(() => {
-    if (pricing && Object.keys(plans).length > 0) {
-      calculateAllPlans();
-    }
-  }, [pricing, plans, userCount, billingCycle]);
-
-  const fetchPlans = async () => {
+  const fetchPlan = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/subscription/plans`);
+      const response = await fetch(`${API_URL}/api/subscription/plan`);
       const data = await response.json();
       if (data.success) {
-        setPlans(data.plans);
+        setPlan(data.plan);
       }
     } catch (error) {
-      console.error('Failed to fetch plans:', error);
+      console.error('Failed to fetch plan:', error);
     }
   };
 
-  const fetchPricing = async () => {
+  const fetchCountries = async () => {
     try {
-      setLoading(true);
-      const response = await fetch(`${API_URL}/api/subscription/pricing/${selectedCountry}`);
+      const response = await fetch(`${API_URL}/api/subscription/countries/all`);
       const data = await response.json();
       if (data.success) {
-        setPricing(data.pricing);
+        setCountries(data.countries);
       }
     } catch (error) {
-      console.error('Failed to fetch pricing:', error);
+      console.error('Failed to fetch countries:', error);
+    }
+  };
+
+  const calculateCost = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/api/subscription/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          countryCode: selectedCountry,
+          billingCycle
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setCalculation(data.calculation);
+      }
+    } catch (error) {
+      console.error('Failed to calculate cost:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateAllPlans = async () => {
-    const newCalculations: Record<string, any> = {};
-
-    for (const [planId, plan] of Object.entries(plans)) {
-      try {
-        // Check if user count exceeds plan limit
-        if (plan.maxUsers !== -1 && userCount > plan.maxUsers) {
-          newCalculations[planId] = {
-            error: `Maximum ${plan.maxUsers} users`
-          };
-          continue;
-        }
-
-        const response = await fetch(`${API_URL}/api/subscription/calculate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            countryCode: selectedCountry,
-            planId,
-            userCount
-          })
-        });
-
-        const data = await response.json();
-        if (data.success) {
-          newCalculations[planId] = data.calculation;
-        }
-      } catch (error) {
-        console.error(`Failed to calculate ${planId}:`, error);
-      }
-    }
-
-    setCalculations(newCalculations);
-  };
-
-  const handleSelectPlan = (planId: string) => {
+  const handleSelectPlan = () => {
     const token = localStorage.getItem('token');
     if (!token) {
       navigate('/setup', { 
         state: { 
           returnTo: '/pricing',
-          selectedPlan: planId,
           selectedCountry,
-          userCount,
           billingCycle
         } 
       });
@@ -135,34 +108,14 @@ export default function Pricing() {
 
     navigate('/checkout', {
       state: {
-        planId,
         countryCode: selectedCountry,
-        userCount,
         billingCycle,
-        calculation: calculations[planId]
+        calculation
       }
     });
   };
 
-  const getPlanIcon = (planId: string) => {
-    switch (planId.toLowerCase()) {
-      case 'starter': return Users;
-      case 'professional': return TrendingUp;
-      case 'enterprise': return Sparkles;
-      default: return Database;
-    }
-  };
-
-  const getPlanColor = (planId: string) => {
-    switch (planId.toLowerCase()) {
-      case 'starter': return 'from-blue-600 to-cyan-600';
-      case 'professional': return 'from-purple-600 to-pink-600';
-      case 'enterprise': return 'from-orange-600 to-red-600';
-      default: return 'from-gray-600 to-gray-800';
-    }
-  };
-
-  if (loading) {
+  if (loading && !calculation) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
         <div className="text-center">
@@ -173,16 +126,25 @@ export default function Pricing() {
     );
   }
 
+  const currentPrice = billingCycle === 'monthly' 
+    ? calculation?.monthly?.formatted 
+    : calculation?.yearly?.formatted;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-12 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <Crown className="w-4 h-4" />
+            <span>One Plan, All Features, Fair Pricing</span>
+          </div>
+          
           <h1 className="text-5xl font-bold text-gray-900 mb-4">
-            Simple, Transparent Pricing
+            Professional Case Management
           </h1>
           <p className="text-xl text-gray-600 mb-8">
-            Choose the perfect plan for your firm. Pay per user, cancel anytime.
+            Complete solution for law firms. Priced fairly based on your country's economy.
           </p>
 
           {/* Country Selector */}
@@ -193,168 +155,154 @@ export default function Pricing() {
               onChange={(e) => setSelectedCountry(e.target.value)}
               className="px-4 py-2 border-0 rounded-lg focus:ring-2 focus:ring-blue-500 bg-transparent font-medium text-gray-900 cursor-pointer"
             >
-              {COUNTRIES.map(country => (
+              {countries.map(country => (
                 <option key={country.code} value={country.code}>
-                  {country.flag} {country.name}
+                  {country.country} ({country.symbol}{country.price})
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="max-w-2xl mx-auto mb-12 space-y-6">
-          {/* Billing Cycle Toggle */}
-          <div className="flex justify-center">
-            <div className="bg-white rounded-xl p-1 shadow-lg inline-flex">
-              <button
-                onClick={() => setBillingCycle('monthly')}
-                className={`px-6 py-3 rounded-lg font-medium transition-all ${
-                  billingCycle === 'monthly'
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setBillingCycle('yearly')}
-                className={`px-6 py-3 rounded-lg font-medium transition-all relative ${
-                  billingCycle === 'yearly'
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Yearly
-                <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
-                  Save 15%
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* User Count Slider */}
-          <div className="bg-white rounded-xl p-6 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-medium text-gray-700">
-                Number of Users
-              </label>
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-600" />
-                <span className="text-2xl font-bold text-gray-900">{userCount}</span>
-              </div>
-            </div>
-            <input
-              type="range"
-              min="1"
-              max="50"
-              value={userCount}
-              onChange={(e) => setUserCount(parseInt(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-2">
-              <span>1 user</span>
-              <span>50 users</span>
-            </div>
+        {/* Billing Cycle Toggle */}
+        <div className="flex justify-center mb-12">
+          <div className="bg-white rounded-xl p-1 shadow-lg inline-flex">
+            <button
+              onClick={() => setBillingCycle('monthly')}
+              className={`px-6 py-3 rounded-lg font-medium transition-all ${
+                billingCycle === 'monthly'
+                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBillingCycle('yearly')}
+              className={`px-6 py-3 rounded-lg font-medium transition-all relative ${
+                billingCycle === 'yearly'
+                  ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Yearly
+              <span className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
+                Save 15%
+              </span>
+            </button>
           </div>
         </div>
 
-        {/* Pricing Cards */}
-        <div className="grid md:grid-cols-3 gap-8 mb-12">
-          {Object.entries(plans).map(([planId, plan]) => {
-            const calc = calculations[planId];
-            const Icon = getPlanIcon(planId);
-            const isPopular = planId.toLowerCase() === 'professional';
+        {/* Main Pricing Card */}
+        <div className="max-w-4xl mx-auto mb-12">
+          <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-purple-600 relative">
+            {/* Popular Badge */}
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white text-center py-3 font-bold text-lg">
+              ⭐ COMPLETE SOLUTION - ALL FEATURES INCLUDED
+            </div>
 
-            return (
-              <div
-                key={planId}
-                className={`bg-white rounded-2xl shadow-xl overflow-hidden transform transition-all hover:scale-105 ${
-                  isPopular ? 'ring-4 ring-purple-600 relative' : ''
-                }`}
-              >
-                {isPopular && (
-                  <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white text-center py-2 font-medium text-sm">
-                    ⭐ MOST POPULAR
+            <div className="p-12">
+              {/* Plan Header */}
+              <div className="text-center mb-8">
+                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl mb-4">
+                  <Sparkles className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-4xl font-bold text-gray-900 mb-2">
+                  {plan?.name}
+                </h2>
+                <p className="text-lg text-gray-600">
+                  {plan?.description}
+                </p>
+              </div>
+
+              {/* Pricing */}
+              {calculation && (
+                <div className="text-center mb-10">
+                  <div className="flex items-baseline justify-center gap-2 mb-2">
+                    <span className="text-6xl font-bold text-gray-900">
+                      {currentPrice}
+                    </span>
+                    <span className="text-2xl text-gray-500">
+                      /{billingCycle === 'monthly' ? 'month' : 'year'}
+                    </span>
                   </div>
-                )}
-
-                <div className="p-8">
-                  {/* Plan Header */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-12 h-12 bg-gradient-to-br ${getPlanColor(planId)} rounded-xl flex items-center justify-center`}>
-                      <Icon className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-gray-900">{plan.name}</h3>
-                      <p className="text-sm text-gray-500">
-                        {plan.maxUsers === -1 ? 'Unlimited' : `Up to ${plan.maxUsers}`} users
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Pricing */}
-                  {calc && !calc.error ? (
-                    <div className="mb-6">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-4xl font-bold text-gray-900">
-                          {billingCycle === 'monthly' ? calc.monthly.formatted : calc.yearly.formatted}
-                        </span>
-                        <span className="text-gray-500">
-                          /{billingCycle === 'monthly' ? 'month' : 'year'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-2">
-                        {calc.symbol}{calc.pricePerUser} per user/{billingCycle === 'monthly' ? 'month' : 'year'}
-                      </p>
-                      {billingCycle === 'yearly' && (
-                        <p className="text-sm text-green-600 font-medium mt-1">
-                          Save {calc.yearly.savingsFormatted} per year
-                        </p>
-                      )}
-                    </div>
-                  ) : calc?.error ? (
-                    <div className="mb-6">
-                      <p className="text-red-600 font-medium">{calc.error}</p>
-                    </div>
-                  ) : (
-                    <div className="mb-6">
-                      <div className="h-12 bg-gray-100 rounded animate-pulse"></div>
+                  <p className="text-gray-600 mb-4">
+                    For your entire firm • Unlimited everything
+                  </p>
+                  {billingCycle === 'yearly' && calculation.yearly && (
+                    <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-lg">
+                      <span className="font-medium">
+                        Save {calculation.yearly.savingsFormatted} per year (15% discount)
+                      </span>
                     </div>
                   )}
-
-                  {/* Features */}
-                  <ul className="space-y-3 mb-8">
-                    {plan.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-3">
-                        <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-gray-700 text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* CTA Button */}
-                  <button
-                    onClick={() => handleSelectPlan(planId)}
-                    disabled={calc?.error}
-                    className={`w-full py-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
-                      isPopular
-                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl'
-                        : 'bg-gray-900 text-white hover:bg-gray-800'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    <span>Get Started</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
                 </div>
+              )}
+
+              {/* CTA Button */}
+              <button
+                onClick={handleSelectPlan}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-5 rounded-xl font-bold text-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-3 mb-10"
+              >
+                <span>Get Started Now</span>
+                <ArrowRight className="w-6 h-6" />
+              </button>
+
+              {/* Features Grid */}
+              <div className="grid md:grid-cols-2 gap-x-8 gap-y-4">
+                {plan?.features.map((feature, idx) => (
+                  <div key={idx} className="flex items-start gap-3">
+                    <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-700">{feature}</span>
+                  </div>
+                ))}
               </div>
-            );
-          })}
+            </div>
+          </div>
         </div>
 
-        {/* Features Grid */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12">
-          <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">
+        {/* Why Fair Pricing */}
+        <div className="bg-white rounded-2xl shadow-xl p-8 md:p-12 mb-12">
+          <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
+            Why Country-Based Pricing?
+          </h2>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mb-4">
+                <Globe className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Fair & Accessible</h3>
+              <p className="text-gray-600">
+                Pricing adjusted to your country's economy and cost of living. Everyone gets the same features.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl mb-4">
+                <Users className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">No Hidden Costs</h3>
+              <p className="text-gray-600">
+                One price for unlimited users, cases, and storage. No per-user fees or surprise charges.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-pink-600 to-red-600 rounded-2xl mb-4">
+                <Crown className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Premium Features</h3>
+              <p className="text-gray-600">
+                Every customer gets the complete solution with all features, regardless of country.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Features Showcase */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl shadow-xl p-8 md:p-12 text-white mb-12">
+          <h2 className="text-3xl font-bold text-center mb-12">
             Everything You Need to Succeed
           </h2>
           
@@ -372,8 +320,8 @@ export default function Pricing() {
               },
               {
                 icon: Users,
-                title: 'Team Collaboration',
-                description: 'Work together seamlessly with real-time updates and notifications'
+                title: 'Unlimited Users',
+                description: 'Add your entire team without worrying about per-user costs'
               },
               {
                 icon: Database,
@@ -387,28 +335,59 @@ export default function Pricing() {
               },
               {
                 icon: Globe,
-                title: 'Global Support',
-                description: '24/7 customer support in multiple languages and time zones'
+                title: '24/7 Support',
+                description: 'Customer support available around the clock in multiple languages'
               }
             ].map((feature, idx) => (
               <div key={idx} className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl mb-4">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 rounded-2xl mb-4">
                   <feature.icon className="w-8 h-8 text-white" />
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-gray-600">{feature.description}</p>
+                <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
+                <p className="text-gray-300">{feature.description}</p>
               </div>
             ))}
           </div>
         </div>
 
+        {/* Pricing Tiers Info */}
+        <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl p-8 md:p-12 mb-12">
+          <h2 className="text-3xl font-bold text-gray-900 text-center mb-8">
+            Pricing Tiers by Region
+          </h2>
+          
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-white rounded-xl p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-gray-900 mb-3">🏆 Premium Markets</h3>
+              <p className="text-sm text-gray-600 mb-3">Switzerland, Norway, Luxembourg, Iceland</p>
+              <p className="text-2xl font-bold text-purple-600">CHF 95 - kr 850</p>
+            </div>
+
+            <div className="bg-white rounded-xl p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-gray-900 mb-3">💼 High-Income Markets</h3>
+              <p className="text-sm text-gray-600 mb-3">US, UK, Australia, Canada, EU</p>
+              <p className="text-2xl font-bold text-blue-600">$75 - £78 - €72</p>
+            </div>
+
+            <div className="bg-white rounded-xl p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-gray-900 mb-3">🌍 Emerging Markets</h3>
+              <p className="text-sm text-gray-600 mb-3">India, Brazil, South Africa, etc.</p>
+              <p className="text-2xl font-bold text-green-600">₹4,800 - R$320</p>
+            </div>
+          </div>
+
+          <p className="text-center text-gray-600 mt-6">
+            All tiers include the exact same features. Pricing varies only by country's economy.
+          </p>
+        </div>
+
         {/* FAQ Section */}
-        <div className="mt-16 text-center">
+        <div className="text-center">
           <h2 className="text-3xl font-bold text-gray-900 mb-4">
             Have Questions?
           </h2>
           <p className="text-gray-600 mb-8">
-            Our team is here to help you choose the right plan
+            Our team is here to help you get started
           </p>
           <button className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl">
             Contact Sales
