@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Building2, Mail, Lock, User, ArrowRight, Check, Sparkles, Shield, Zap, TrendingUp, Users, Globe, Eye, EyeOff } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Building2, Mail, Lock, User, ArrowRight, Check, Sparkles, Shield, Zap, TrendingUp, Users, Eye, EyeOff } from 'lucide-react';
 
 // ============================================
 // MODERN SPLIT-SCREEN LOGIN/SIGNUP
-// Beautiful animations, smooth transitions
+// With email verification & password reset
 // ============================================
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://casestack-backend.onrender.com';
 
 export default function FirmSetupProfessional() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [step, setStep] = useState<'auth' | 'firm' | 'complete'>('auth');
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('signup');
   const [loading, setLoading] = useState(false);
@@ -43,13 +44,25 @@ export default function FirmSetupProfessional() {
       const parsedUser = JSON.parse(userData);
       setUser(parsedUser);
       
+      // Check if coming from verification
+      if (location.state?.verified) {
+        setStep('firm');
+        return;
+      }
+      
+      // Check if email is verified
+      if (!parsedUser.isVerified) {
+        navigate('/verify-email', { state: { email: parsedUser.email } });
+        return;
+      }
+      
       if (parsedUser.firmId) {
         navigate('/dashboard');
       } else {
         setStep('firm');
       }
     }
-  }, [navigate]);
+  }, [navigate, location]);
 
   // ============================================
   // SIGN UP
@@ -80,10 +93,16 @@ export default function FirmSetupProfessional() {
       }
 
       const data = await response.json();
-      localStorage.setItem('token', data.token);
+      
+      // Store tokens
+      localStorage.setItem('token', data.tokens.accessToken);
+      localStorage.setItem('refreshToken', data.tokens.refreshToken);
       localStorage.setItem('user', JSON.stringify(data.user));
+      
       setUser(data.user);
-      setStep('firm');
+      
+      // Redirect to email verification
+      navigate('/verify-email', { state: { email: data.user.email } });
     } catch (error: any) {
       setError(error.message || 'Signup failed. Please try again.');
     } finally {
@@ -114,12 +133,23 @@ export default function FirmSetupProfessional() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Check if email verification is required
+        if (errorData.verificationRequired) {
+          navigate('/verify-email', { state: { email: authData.email } });
+          return;
+        }
+        
         throw new Error(errorData.error || 'Login failed');
       }
 
       const data = await response.json();
-      localStorage.setItem('token', data.token);
+      
+      // Store tokens
+      localStorage.setItem('token', data.tokens.accessToken);
+      localStorage.setItem('refreshToken', data.tokens.refreshToken);
       localStorage.setItem('user', JSON.stringify(data.user));
+      
       setUser(data.user);
       
       if (data.user.firmId) {
@@ -354,7 +384,7 @@ export default function FirmSetupProfessional() {
                     onChange={(e) => setAuthData({ ...authData, password: e.target.value })}
                     className="w-full pl-11 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     placeholder="••••••••"
-                    minLength={6}
+                    minLength={authMode === 'signup' ? 8 : 6}
                   />
                   <button
                     type="button"
@@ -366,7 +396,7 @@ export default function FirmSetupProfessional() {
                 </div>
                 {authMode === 'signup' && (
                   <p className="mt-2 text-xs text-gray-500">
-                    Must be at least 6 characters
+                    Must be at least 8 characters with uppercase, lowercase, and number
                   </p>
                 )}
               </div>
@@ -377,9 +407,13 @@ export default function FirmSetupProfessional() {
                     <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" />
                     <span className="text-gray-600">Remember me</span>
                   </label>
-                  <a href="#" className="text-blue-600 hover:text-blue-700 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/forgot-password')}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
                     Forgot password?
-                  </a>
+                  </button>
                 </div>
               )}
 
