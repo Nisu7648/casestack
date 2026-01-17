@@ -2,455 +2,757 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
-const { authLimiter } = require('../../middleware/rateLimiter.middleware');
-const deviceSessionService = require('../../services/deviceSession.service');
-const { logger } = require('../../utils/logger');
-
-const prisma = new PrismaClient();
+const { body, validationResult } = require('express-validator');
+const crypto = require('crypto');
 
 // ============================================
-// AUTH & FIRM MANAGEMENT MODULE
-// WITH DEVICE SESSION MANAGEMENT (MAX 3 DEVICES)
+// ADVANCED AUTHENTICATION SYSTEM
+// Email verification, password reset, sessions
 // ============================================
 
-// Register new firm (creates firm + first admin user)
-router.post('/register', authLimiter, async (req, res) => {
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key';
+const ACCESS_TOKEN_EXPIRY = '15m'; // 15 minutes
+const REFRESH_TOKEN_EXPIRY = '7d'; // 7 days
+
+// In-memory storage (replace with database in production)
+const users = new Map();
+const verificationCodes = new Map();
+const resetTokens = new Map();
+const refreshTokens = new Map();
+const sessions = new Map();
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+// Generate verification code
+function generateVerificationCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Generate reset token
+function generateResetToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Generate tokens
+function generateTokens(userId) {
+  const accessToken = jwt.sign({ userId }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+  const refreshToken = jwt.sign({ userId }, JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
+  return { accessToken, refreshToken };
+}
+
+// Create session
+function createSession(userId, userAgent, ipAddress) {
+  const sessionId = crypto.randomUUID();
+  const session = {
+    sessionId,
+    userId,
+    userAgent,
+    ipAddress,
+    createdAt: new Date(),
+    lastActivity: new Date(),
+    isActive: true
+  };
+  
+  if (!sessions.has(userId)) {
+    sessions.set(userId, []);
+  }
+  sessions.get(userId).push(session);
+  
+  return sessionId;
+}
+
+// Validate email format
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// Validate password strength
+function isStrongPassword(password) {
+  // At least 8 characters, 1 uppercase, 1 lowercase, 1 number
+  const strongRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+  return strongRegex.test(password);
+}
+
+// ============================================
+// MIDDLEWARE - AUTH
+// ============================================
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.userId = decoded.userId;
+    next();
+  });
+};
+
+// ============================================
+// 1. REGISTER (WITH EMAIL VERIFICATION)
+// ============================================
+router.post('/register', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 8 }),
+  body('firstName').trim().notEmpty(),
+  body('lastName').trim().notEmpty()
+], async (req, res) => {
   try {
-    const {
-      // Firm details
-      firmName,
-      country,
-      industry,
-      
-      // First user (admin)
-      email,
-      password,
-      firstName,
-      lastName
-    } = req.body;
-
-    // Validation
-    if (!firmName || !country || !email || !password || !firstName || !lastName) {
-      return res.status(400).json({ error: 'All fields are required' });
+    // Validate input
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: errors.array() 
+      });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
+    const { email, password, firstName, lastName } = req.body;
 
-    // Check if email already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    });
-
+    // Check if user exists
+    const existingUser = Array.from(users.values()).find(u => u.email === email);
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    // Determine pricing based on country
-    let pricePerSeat = 1399; // Default India
-    let billingCurrency = 'INR';
-
-    if (country === 'Switzerland') {
-      pricePerSeat = 75;
-      billingCurrency = 'CHF';
-    } else if (['Germany', 'France', 'UK', 'Netherlands', 'Belgium', 'Austria'].includes(country)) {
-      pricePerSeat = 35;
-      billingCurrency = 'EUR';
-    } else if (country === 'USA') {
-      pricePerSeat = 40;
-      billingCurrency = 'USD';
+    // Validate password strength
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({ 
+        error: 'Password must be at least 8 characters with uppercase, lowercase, and number' 
+      });
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create firm + first user in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create firm
-      const firm = await tx.firm.create({
-        data: {
-          name: firmName,
-          country,
-          industry,
-          licenseType: 'ENTERPRISE',
-          seatsLicensed: 10, // Default 10 seats
-          seatsUsed: 1,
-          pricePerSeat,
-          billingCurrency
-        }
-      });
+    // Create user
+    const userId = crypto.randomUUID();
+    const user = {
+      id: userId,
+      email,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      isVerified: false, // Email verification required
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastLogin: null,
+      firmId: null,
+      role: 'user',
+      status: 'pending_verification'
+    };
 
-      // Create firm settings (with maxDevicesPerUser = 3)
-      await tx.firmSettings.create({
-        data: {
-          firmId: firm.id,
-          requirePartnerForFinalization: true,
-          requireTwoApprovers: false,
-          enableDownloadTracking: true,
-          enableAuditExport: true,
-          maxDevicesPerUser: 3, // NEW: Max 3 devices per user
-          autoArchiveAfterYears: 7
-        }
-      });
+    users.set(userId, user);
 
-      // Create first user (admin)
-      const user = await tx.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          firstName,
-          lastName,
-          role: 'ADMIN',
-          firmId: firm.id,
-          isActive: true
-        }
-      });
-
-      // Create subscription
-      await tx.subscription.create({
-        data: {
-          firmId: firm.id,
-          pricePerUser: pricePerSeat,
-          currency: billingCurrency,
-          billingCycle: 'MONTHLY',
-          activeUsers: 1,
-          status: 'ACTIVE'
-        }
-      });
-
-      return { firm, user };
+    // Generate verification code
+    const verificationCode = generateVerificationCode();
+    verificationCodes.set(email, {
+      code: verificationCode,
+      userId,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
     });
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: result.user.id,
-        firmId: result.firm.id,
-        role: result.user.role
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+    // In production, send email here
+    console.log(`Verification code for ${email}: ${verificationCode}`);
+
+    // Generate tokens
+    const { accessToken, refreshToken } = generateTokens(userId);
+    refreshTokens.set(refreshToken, userId);
+
+    // Create session
+    const sessionId = createSession(
+      userId,
+      req.headers['user-agent'],
+      req.ip
     );
 
-    // Create device session
-    try {
-      await deviceSessionService.createSession(result.user.id, token, req);
-    } catch (deviceError) {
-      logger.error('Failed to create device session on registration', deviceError);
-      // Continue anyway - don't block registration
-    }
-
-    logger.info('Firm registered', { firmId: result.firm.id, userId: result.user.id });
-
     res.status(201).json({
-      message: 'Firm and admin account created successfully',
-      token,
+      success: true,
+      message: 'Registration successful. Please verify your email.',
       user: {
-        id: result.user.id,
-        email: result.user.email,
-        firstName: result.user.firstName,
-        lastName: result.user.lastName,
-        role: result.user.role,
-        firmId: result.firm.id,
-        firmName: result.firm.name
-      }
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        isVerified: user.isVerified,
+        status: user.status
+      },
+      tokens: {
+        accessToken,
+        refreshToken
+      },
+      sessionId,
+      verificationRequired: true
     });
   } catch (error) {
-    logger.error('Registration error:', error);
+    console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
-// Login (with device session management)
-router.post('/login', authLimiter, async (req, res) => {
+// ============================================
+// 2. VERIFY EMAIL
+// ============================================
+router.post('/verify-email', [
+  body('email').isEmail().normalizeEmail(),
+  body('code').isLength({ min: 6, max: 6 })
+], async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    const verification = verificationCodes.get(email);
+    if (!verification) {
+      return res.status(400).json({ error: 'Invalid or expired verification code' });
+    }
+
+    if (verification.expiresAt < new Date()) {
+      verificationCodes.delete(email);
+      return res.status(400).json({ error: 'Verification code expired' });
+    }
+
+    if (verification.code !== code) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    // Update user
+    const user = users.get(verification.userId);
+    if (user) {
+      user.isVerified = true;
+      user.status = 'active';
+      user.updatedAt = new Date();
+      users.set(user.id, user);
+    }
+
+    // Remove verification code
+    verificationCodes.delete(email);
+
+    res.json({
+      success: true,
+      message: 'Email verified successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        isVerified: user.isVerified,
+        status: user.status
+      }
+    });
+  } catch (error) {
+    console.error('Verification error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// ============================================
+// 3. RESEND VERIFICATION CODE
+// ============================================
+router.post('/resend-verification', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = Array.from(users.values()).find(u => u.email === email);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ error: 'Email already verified' });
+    }
+
+    // Generate new code
+    const verificationCode = generateVerificationCode();
+    verificationCodes.set(email, {
+      code: verificationCode,
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+    });
+
+    console.log(`New verification code for ${email}: ${verificationCode}`);
+
+    res.json({
+      success: true,
+      message: 'Verification code sent'
+    });
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ error: 'Failed to resend verification code' });
+  }
+});
+
+// ============================================
+// 4. LOGIN (WITH SESSION TRACKING)
+// ============================================
+router.post('/login', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').notEmpty()
+], async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
-    }
-
-    // Find user with firm
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: {
-        firm: {
-          select: { id: true, name: true, country: true }
-        }
-      }
-    });
-
+    // Find user
+    const user = Array.from(users.values()).find(u => u.email === email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    if (!user.isActive) {
-      return res.status(403).json({ error: 'Account is inactive' });
-    }
-
-    // Verify password
-    const validPassword = await bcrypt.compare(password, user.password);
-
-    if (!validPassword) {
+    // Check password
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        firmId: user.firmId,
-        role: user.role
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Create device session (with max 3 devices check)
-    try {
-      await deviceSessionService.createSession(user.id, token, req);
-    } catch (deviceError) {
-      // Device limit exceeded
-      if (deviceError.message.includes('Device limit exceeded')) {
-        logger.warn('Device limit exceeded on login', { userId: user.id, email: user.email });
-        
-        // Get active sessions
-        const sessions = await deviceSessionService.getUserSessions(user.id);
-        
-        return res.status(403).json({
-          error: 'Device limit exceeded',
-          message: deviceError.message,
-          activeSessions: sessions.map(s => ({
-            id: s.id,
-            deviceName: s.deviceName,
-            deviceType: s.deviceType,
-            lastActivityAt: s.lastActivityAt,
-            createdAt: s.createdAt
-          }))
-        });
-      }
-      
-      logger.error('Failed to create device session on login', deviceError);
-      // Continue anyway - don't block login
+    // Check if verified
+    if (!user.isVerified) {
+      return res.status(403).json({ 
+        error: 'Email not verified',
+        verificationRequired: true 
+      });
     }
 
     // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() }
-    });
+    user.lastLogin = new Date();
+    users.set(user.id, user);
 
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        firmId: user.firmId,
-        userId: user.id,
-        action: 'USER_LOGIN',
-        resourceType: 'USER',
-        resourceId: user.id,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent')
-      }
-    });
+    // Generate tokens
+    const { accessToken, refreshToken } = generateTokens(user.id);
+    refreshTokens.set(refreshToken, user.id);
 
-    logger.info('User logged in', { userId: user.id, email: user.email });
+    // Create session
+    const sessionId = createSession(
+      user.id,
+      req.headers['user-agent'],
+      req.ip
+    );
 
     res.json({
-      token,
+      success: true,
+      message: 'Login successful',
       user: {
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        role: user.role,
         firmId: user.firmId,
-        firmName: user.firm.name,
-        country: user.firm.country
-      }
+        role: user.role,
+        isVerified: user.isVerified,
+        lastLogin: user.lastLogin
+      },
+      tokens: {
+        accessToken,
+        refreshToken
+      },
+      sessionId
     });
   } catch (error) {
-    logger.error('Login error:', error);
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// Logout (from current device)
-router.post('/logout', async (req, res) => {
+// ============================================
+// 5. REFRESH TOKEN
+// ============================================
+router.post('/refresh-token', [
+  body('refreshToken').notEmpty()
+], async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const { refreshToken } = req.body;
 
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
+    if (!refreshTokens.has(refreshToken)) {
+      return res.status(403).json({ error: 'Invalid refresh token' });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Find and deactivate session
-    const session = await prisma.deviceSession.findUnique({
-      where: { token }
-    });
-
-    if (session) {
-      await deviceSessionService.logoutDevice(decoded.userId, session.id);
-    }
-
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        firmId: decoded.firmId,
-        userId: decoded.userId,
-        action: 'USER_LOGOUT',
-        resourceType: 'DEVICE',
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent')
+    jwt.verify(refreshToken, JWT_REFRESH_SECRET, (err, decoded) => {
+      if (err) {
+        refreshTokens.delete(refreshToken);
+        return res.status(403).json({ error: 'Invalid or expired refresh token' });
       }
+
+      const userId = decoded.userId;
+      const user = users.get(userId);
+
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Generate new tokens
+      const tokens = generateTokens(userId);
+      
+      // Remove old refresh token
+      refreshTokens.delete(refreshToken);
+      
+      // Store new refresh token
+      refreshTokens.set(tokens.refreshToken, userId);
+
+      res.json({
+        success: true,
+        tokens
+      });
+    });
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    res.status(500).json({ error: 'Token refresh failed' });
+  }
+});
+
+// ============================================
+// 6. FORGOT PASSWORD
+// ============================================
+router.post('/forgot-password', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = Array.from(users.values()).find(u => u.email === email);
+    if (!user) {
+      // Don't reveal if user exists
+      return res.json({
+        success: true,
+        message: 'If the email exists, a reset link has been sent'
+      });
+    }
+
+    // Generate reset token
+    const resetToken = generateResetToken();
+    resetTokens.set(resetToken, {
+      userId: user.id,
+      email: user.email,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000) // 1 hour
     });
 
-    logger.info('User logged out', { userId: decoded.userId });
-
-    res.json({ message: 'Logged out successfully' });
-  } catch (error) {
-    logger.error('Logout error:', error);
-    res.status(500).json({ error: 'Logout failed' });
-  }
-});
-
-// Logout from all devices
-router.post('/logout-all', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Logout from all devices
-    await deviceSessionService.logoutAllDevices(decoded.userId);
-
-    logger.info('User logged out from all devices', { userId: decoded.userId });
-
-    res.json({ message: 'Logged out from all devices successfully' });
-  } catch (error) {
-    logger.error('Logout all error:', error);
-    res.status(500).json({ error: 'Logout failed' });
-  }
-});
-
-// Get active device sessions
-router.get('/sessions', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Get sessions
-    const sessions = await deviceSessionService.getUserSessions(decoded.userId);
-
-    // Get device limit info
-    const deviceLimit = await deviceSessionService.checkDeviceLimit(decoded.userId);
+    // In production, send email here
+    console.log(`Password reset token for ${email}: ${resetToken}`);
+    console.log(`Reset link: http://localhost:3000/reset-password?token=${resetToken}`);
 
     res.json({
-      sessions: sessions.map(s => ({
-        id: s.id,
-        deviceName: s.deviceName,
-        deviceType: s.deviceType,
-        browser: s.browser,
-        os: s.os,
-        ipAddress: s.ipAddress,
-        lastActivityAt: s.lastActivityAt,
-        createdAt: s.createdAt,
-        isCurrent: s.token === token
-      })),
-      deviceLimit: {
-        current: deviceLimit.current,
-        max: deviceLimit.max,
-        available: deviceLimit.max - deviceLimit.current
-      }
+      success: true,
+      message: 'If the email exists, a reset link has been sent'
     });
   } catch (error) {
-    logger.error('Get sessions error:', error);
-    res.status(500).json({ error: 'Failed to get sessions' });
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to process request' });
   }
 });
 
-// Remove specific device session
-router.delete('/sessions/:sessionId', async (req, res) => {
+// ============================================
+// 7. RESET PASSWORD
+// ============================================
+router.post('/reset-password', [
+  body('token').notEmpty(),
+  body('newPassword').isLength({ min: 8 })
+], async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    const { sessionId } = req.params;
+    const { token, newPassword } = req.body;
 
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
+    const resetData = resetTokens.get(token);
+    if (!resetData) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (resetData.expiresAt < new Date()) {
+      resetTokens.delete(token);
+      return res.status(400).json({ error: 'Reset token expired' });
+    }
 
-    // Logout device
-    await deviceSessionService.logoutDevice(decoded.userId, sessionId);
+    // Validate password strength
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({ 
+        error: 'Password must be at least 8 characters with uppercase, lowercase, and number' 
+      });
+    }
 
-    logger.info('Device session removed', { userId: decoded.userId, sessionId });
+    // Update password
+    const user = users.get(resetData.userId);
+    if (user) {
+      user.password = await bcrypt.hash(newPassword, 12);
+      user.updatedAt = new Date();
+      users.set(user.id, user);
+    }
 
-    res.json({ message: 'Device session removed successfully' });
+    // Remove reset token
+    resetTokens.delete(token);
+
+    // Invalidate all sessions
+    sessions.delete(user.id);
+
+    res.json({
+      success: true,
+      message: 'Password reset successful. Please login with your new password.'
+    });
   } catch (error) {
-    logger.error('Remove session error:', error);
-    res.status(500).json({ error: error.message || 'Failed to remove session' });
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Password reset failed' });
   }
 });
 
-// Get current user
-router.get('/me', async (req, res) => {
+// ============================================
+// 8. CHANGE PASSWORD (AUTHENTICATED)
+// ============================================
+router.post('/change-password', authenticateToken, [
+  body('currentPassword').notEmpty(),
+  body('newPassword').isLength({ min: 8 })
+], async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.userId;
 
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
+    const user = users.get(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
 
-    // Get user
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      include: {
-        firm: {
-          select: { id: true, name: true, country: true }
-        }
-      }
+    // Validate new password
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({ 
+        error: 'Password must be at least 8 characters with uppercase, lowercase, and number' 
+      });
+    }
+
+    // Update password
+    user.password = await bcrypt.hash(newPassword, 12);
+    user.updatedAt = new Date();
+    users.set(userId, user);
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
     });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Password change failed' });
+  }
+});
 
-    if (!user || !user.isActive) {
-      return res.status(401).json({ error: 'User not found or inactive' });
+// ============================================
+// 9. GET PROFILE
+// ============================================
+router.get('/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const user = users.get(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
     res.json({
+      success: true,
       user: {
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        role: user.role,
         firmId: user.firmId,
-        firmName: user.firm.name,
-        country: user.firm.country
+        role: user.role,
+        isVerified: user.isVerified,
+        status: user.status,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin
       }
     });
   } catch (error) {
-    logger.error('Get current user error:', error);
-    res.status(401).json({ error: 'Invalid token' });
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Failed to get profile' });
   }
+});
+
+// ============================================
+// 10. UPDATE PROFILE
+// ============================================
+router.put('/profile', authenticateToken, [
+  body('firstName').optional().trim().notEmpty(),
+  body('lastName').optional().trim().notEmpty()
+], async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { firstName, lastName } = req.body;
+
+    const user = users.get(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    user.updatedAt = new Date();
+
+    users.set(userId, user);
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        firmId: user.firmId
+      }
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Profile update failed' });
+  }
+});
+
+// ============================================
+// 11. GET SESSIONS
+// ============================================
+router.get('/sessions', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const userSessions = sessions.get(userId) || [];
+
+    res.json({
+      success: true,
+      sessions: userSessions.map(s => ({
+        sessionId: s.sessionId,
+        userAgent: s.userAgent,
+        ipAddress: s.ipAddress,
+        createdAt: s.createdAt,
+        lastActivity: s.lastActivity,
+        isActive: s.isActive
+      }))
+    });
+  } catch (error) {
+    console.error('Get sessions error:', error);
+    res.status(500).json({ error: 'Failed to get sessions' });
+  }
+});
+
+// ============================================
+// 12. LOGOUT (SINGLE SESSION)
+// ============================================
+router.post('/logout', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { sessionId } = req.body;
+
+    if (sessionId) {
+      const userSessions = sessions.get(userId) || [];
+      const updatedSessions = userSessions.filter(s => s.sessionId !== sessionId);
+      sessions.set(userId, updatedSessions);
+    }
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// ============================================
+// 13. LOGOUT ALL SESSIONS
+// ============================================
+router.post('/logout-all', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.userId;
+    
+    // Remove all sessions
+    sessions.delete(userId);
+    
+    // Remove all refresh tokens for this user
+    for (const [token, uid] of refreshTokens.entries()) {
+      if (uid === userId) {
+        refreshTokens.delete(token);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Logged out from all devices'
+    });
+  } catch (error) {
+    console.error('Logout all error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// ============================================
+// 14. DELETE ACCOUNT
+// ============================================
+router.delete('/account', authenticateToken, [
+  body('password').notEmpty()
+], async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { password } = req.body;
+
+    const user = users.get(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+
+    // Delete user data
+    users.delete(userId);
+    sessions.delete(userId);
+    
+    // Remove refresh tokens
+    for (const [token, uid] of refreshTokens.entries()) {
+      if (uid === userId) {
+        refreshTokens.delete(token);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Account deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ error: 'Account deletion failed' });
+  }
+});
+
+// ============================================
+// 15. TEST ENDPOINT
+// ============================================
+router.get('/test', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Advanced auth API working',
+    features: [
+      'Email verification',
+      'Password reset',
+      'Session management',
+      'Refresh tokens',
+      'Account management'
+    ],
+    stats: {
+      totalUsers: users.size,
+      activeSessions: Array.from(sessions.values()).flat().length,
+      pendingVerifications: verificationCodes.size
+    },
+    timestamp: new Date().toISOString()
+  });
 });
 
 module.exports = router;
