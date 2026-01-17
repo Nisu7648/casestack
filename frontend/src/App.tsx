@@ -5,6 +5,9 @@ import ThemeToggle from './components/ThemeToggle';
 
 // Auth
 import Login from './pages/casestack/Login';
+import FirmSetupProfessional from './pages/casestack/FirmSetupProfessional';
+import EmailVerification from './pages/casestack/EmailVerification';
+import ForgotPassword from './pages/casestack/ForgotPassword';
 
 // Main screens
 import Dashboard from './pages/casestack/Dashboard';
@@ -18,6 +21,7 @@ import Admin from './pages/casestack/Admin';
 // ============================================
 // CASESTACK APP
 // Professional Black & White Theme
+// Advanced Auth System
 // ============================================
 
 // Protected Route Component
@@ -25,7 +29,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
   
   if (!token) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/setup" replace />;
   }
   
   return <Layout>{children}</Layout>;
@@ -36,8 +40,11 @@ function App() {
     <>
       <ThemeToggle />
       <Routes>
-        {/* Public Routes */}
+        {/* Public Routes - Auth */}
         <Route path="/login" element={<Login />} />
+        <Route path="/setup" element={<FirmSetupProfessional />} />
+        <Route path="/verify-email" element={<EmailVerification />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         
         {/* Protected Routes */}
         <Route path="/dashboard" element={
