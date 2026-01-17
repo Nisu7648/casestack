@@ -5,7 +5,7 @@ const { authenticateToken } = require('../middleware/auth');
 
 // ============================================
 // SUBSCRIPTION ROUTES
-// Country-based pricing & plan management
+// Single-tier pricing with country-specific rates
 // ============================================
 
 // Get pricing for country
@@ -30,16 +30,16 @@ router.get('/pricing/:countryCode', (req, res) => {
 // Calculate subscription cost
 router.post('/calculate', (req, res) => {
   try {
-    const { countryCode, planId, userCount } = req.body;
+    const { countryCode, billingCycle } = req.body;
     
-    if (!countryCode || !planId || !userCount) {
+    if (!countryCode) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: countryCode, planId, userCount'
+        error: 'Missing required field: countryCode'
       });
     }
 
-    const cost = SubscriptionService.calculateCost(countryCode, planId, userCount);
+    const cost = SubscriptionService.calculateCost(countryCode, billingCycle || 'monthly');
     
     res.json({
       success: true,
@@ -53,35 +53,10 @@ router.post('/calculate', (req, res) => {
   }
 });
 
-// Get all plans
-router.get('/plans', (req, res) => {
+// Get plan details
+router.get('/plan', (req, res) => {
   try {
-    const plans = SubscriptionService.getAllPlans();
-    
-    res.json({
-      success: true,
-      plans
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Get specific plan
-router.get('/plans/:planId', (req, res) => {
-  try {
-    const { planId } = req.params;
-    const plan = SubscriptionService.getPlan(planId);
-    
-    if (!plan) {
-      return res.status(404).json({
-        success: false,
-        error: 'Plan not found'
-      });
-    }
+    const plan = SubscriptionService.getPlan();
     
     res.json({
       success: true,
@@ -95,7 +70,7 @@ router.get('/plans/:planId', (req, res) => {
   }
 });
 
-// Get supported countries
+// Get supported countries (grouped by tier)
 router.get('/countries', (req, res) => {
   try {
     const countries = SubscriptionService.getSupportedCountries();
@@ -112,10 +87,27 @@ router.get('/countries', (req, res) => {
   }
 });
 
+// Get all countries (flat list)
+router.get('/countries/all', (req, res) => {
+  try {
+    const countries = SubscriptionService.getAllCountries();
+    
+    res.json({
+      success: true,
+      countries
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Create subscription (Protected)
 router.post('/create', authenticateToken, (req, res) => {
   try {
-    const { countryCode, planId, userCount, billingCycle, paymentMethod } = req.body;
+    const { countryCode, billingCycle, paymentMethod } = req.body;
     const firmId = req.user.firmId;
     
     if (!firmId) {
@@ -125,10 +117,10 @@ router.post('/create', authenticateToken, (req, res) => {
       });
     }
 
-    if (!countryCode || !planId || !userCount || !billingCycle) {
+    if (!countryCode || !billingCycle) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: countryCode, planId, userCount, billingCycle'
+        error: 'Missing required fields: countryCode, billingCycle'
       });
     }
 
@@ -143,8 +135,6 @@ router.post('/create', authenticateToken, (req, res) => {
 
     const subscription = SubscriptionService.createSubscription(firmId, {
       countryCode,
-      planId,
-      userCount,
       billingCycle,
       paymentMethod: paymentMethod || 'card'
     });
@@ -333,74 +323,6 @@ router.post('/:subscriptionId/reactivate', authenticateToken, (req, res) => {
       success: true,
       subscription: reactivatedSubscription,
       message: 'Subscription reactivated successfully'
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Check if can add users (Protected)
-router.post('/check/users', authenticateToken, (req, res) => {
-  try {
-    const firmId = req.user.firmId;
-    const { additionalUsers } = req.body;
-    
-    if (!firmId) {
-      return res.status(400).json({
-        success: false,
-        error: 'User must be associated with a firm'
-      });
-    }
-
-    if (!additionalUsers || additionalUsers < 1) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid additionalUsers value'
-      });
-    }
-
-    const result = SubscriptionService.canAddUsers(firmId, additionalUsers);
-    
-    res.json({
-      success: true,
-      ...result
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Check if can add cases (Protected)
-router.post('/check/cases', authenticateToken, (req, res) => {
-  try {
-    const firmId = req.user.firmId;
-    const { additionalCases, currentCases } = req.body;
-    
-    if (!firmId) {
-      return res.status(400).json({
-        success: false,
-        error: 'User must be associated with a firm'
-      });
-    }
-
-    if (!additionalCases || additionalCases < 1 || currentCases === undefined) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid additionalCases or currentCases value'
-      });
-    }
-
-    const result = SubscriptionService.canAddCases(firmId, additionalCases, currentCases);
-    
-    res.json({
-      success: true,
-      ...result
     });
   } catch (error) {
     res.status(400).json({
