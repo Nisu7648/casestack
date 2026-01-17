@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { CreditCard, Building2, Lock, Check, ArrowLeft, ArrowRight } from 'lucide-react';
+import { CreditCard, Building2, Lock, Check, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://casestack-backend.onrender.com';
 
 export default function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { planId, countryCode, userCount, billingCycle, calculation } = location.state || {};
+  const { countryCode, billingCycle, calculation } = location.state || {};
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -20,7 +20,7 @@ export default function Checkout() {
     cvv: ''
   });
 
-  if (!planId || !calculation) {
+  if (!countryCode || !calculation) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
         <div className="text-center">
@@ -58,8 +58,6 @@ export default function Checkout() {
         },
         body: JSON.stringify({
           countryCode,
-          planId,
-          userCount,
           billingCycle,
           paymentMethod
         })
@@ -99,8 +97,8 @@ export default function Checkout() {
   };
 
   const totalAmount = billingCycle === 'monthly' 
-    ? calculation.monthly.total 
-    : calculation.yearly.total;
+    ? calculation.monthly.formatted 
+    : calculation.yearly.formatted;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-12 px-4">
@@ -274,28 +272,32 @@ export default function Checkout() {
           {/* Right Side - Order Summary */}
           <div>
             <div className="bg-white rounded-2xl shadow-xl p-8 sticky top-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                Order Summary
-              </h2>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl flex items-center justify-center">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {calculation.plan}
+                  </h2>
+                  <p className="text-sm text-gray-600">Complete Solution</p>
+                </div>
+              </div>
 
               {/* Plan Details */}
               <div className="space-y-4 mb-6 pb-6 border-b border-gray-200">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Plan</span>
-                  <span className="font-medium text-gray-900">{calculation.plan}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Users</span>
-                  <span className="font-medium text-gray-900">{userCount}</span>
+                  <span className="text-gray-600">Country</span>
+                  <span className="font-medium text-gray-900">{calculation.country}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Billing Cycle</span>
                   <span className="font-medium text-gray-900 capitalize">{billingCycle}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Price per User</span>
+                  <span className="text-gray-600">Currency</span>
                   <span className="font-medium text-gray-900">
-                    {calculation.symbol}{calculation.pricePerUser}
+                    {calculation.currency} ({calculation.symbol})
                   </span>
                 </div>
               </div>
@@ -304,13 +306,9 @@ export default function Checkout() {
               <div className="space-y-3 mb-6 pb-6 border-b border-gray-200">
                 <div className="flex justify-between text-gray-600">
                   <span>Subtotal</span>
-                  <span>
-                    {billingCycle === 'monthly' 
-                      ? calculation.monthly.formatted 
-                      : calculation.yearly.formatted}
-                  </span>
+                  <span>{totalAmount}</span>
                 </div>
-                {billingCycle === 'yearly' && (
+                {billingCycle === 'yearly' && calculation.yearly && (
                   <div className="flex justify-between text-green-600 font-medium">
                     <span>Yearly Discount (15%)</span>
                     <span>-{calculation.yearly.savingsFormatted}</span>
@@ -322,9 +320,7 @@ export default function Checkout() {
               <div className="flex justify-between items-center mb-8">
                 <span className="text-xl font-bold text-gray-900">Total</span>
                 <span className="text-3xl font-bold text-gray-900">
-                  {billingCycle === 'monthly' 
-                    ? calculation.monthly.formatted 
-                    : calculation.yearly.formatted}
+                  {totalAmount}
                 </span>
               </div>
 
@@ -333,10 +329,13 @@ export default function Checkout() {
                 <h3 className="font-bold text-gray-900 mb-4">What's Included:</h3>
                 <ul className="space-y-2">
                   {[
-                    'Full access to all features',
+                    'Unlimited users',
+                    'Unlimited cases',
+                    'Unlimited storage',
+                    'All premium features',
                     '24/7 customer support',
-                    'Regular updates & improvements',
-                    'Data encryption & security',
+                    'Regular updates',
+                    'Data encryption',
                     'Cancel anytime'
                   ].map((feature, idx) => (
                     <li key={idx} className="flex items-center gap-2 text-sm text-gray-700">
