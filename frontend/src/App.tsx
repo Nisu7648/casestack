@@ -9,6 +9,11 @@ import FirmSetupProfessional from './pages/casestack/FirmSetupProfessional';
 import EmailVerification from './pages/casestack/EmailVerification';
 import ForgotPassword from './pages/casestack/ForgotPassword';
 
+// Subscription
+import Pricing from './pages/casestack/Pricing';
+import Checkout from './pages/casestack/Checkout';
+import SubscriptionSuccess from './pages/casestack/SubscriptionSuccess';
+
 // Main screens
 import Dashboard from './pages/casestack/Dashboard';
 import CaseList from './pages/casestack/CaseList';
@@ -21,7 +26,7 @@ import Admin from './pages/casestack/Admin';
 // ============================================
 // CASESTACK APP
 // Professional Black & White Theme
-// Advanced Auth System
+// Advanced Auth + Subscription System
 // ============================================
 
 // Protected Route Component
@@ -45,6 +50,11 @@ function App() {
         <Route path="/setup" element={<FirmSetupProfessional />} />
         <Route path="/verify-email" element={<EmailVerification />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        
+        {/* Public Routes - Subscription */}
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/subscription-success" element={<SubscriptionSuccess />} />
         
         {/* Protected Routes */}
         <Route path="/dashboard" element={
@@ -90,8 +100,8 @@ function App() {
         } />
         
         {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to="/pricing" replace />} />
+        <Route path="*" element={<Navigate to="/pricing" replace />} />
       </Routes>
     </>
   );
