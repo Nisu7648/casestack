@@ -3,6 +3,9 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import ThemeToggle from './components/ThemeToggle';
 
+// Landing
+import Landing from './pages/Landing';
+
 // Auth
 import Login from './pages/casestack/Login';
 import FirmSetupProfessional from './pages/casestack/FirmSetupProfessional';
@@ -24,9 +27,8 @@ import AuditLogs from './pages/casestack/AuditLogs';
 import Admin from './pages/casestack/Admin';
 
 // ============================================
-// CASESTACK APP
-// Professional Black & White Theme
-// Advanced Auth + Subscription System
+// LEGALSTACK APP
+// Professional, Modern, Fair Pricing
 // ============================================
 
 // Protected Route Component
@@ -34,7 +36,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token');
   
   if (!token) {
-    return <Navigate to="/setup" replace />;
+    return <Navigate to="/login" replace />;
   }
   
   return <Layout>{children}</Layout>;
@@ -45,6 +47,9 @@ function App() {
     <>
       <ThemeToggle />
       <Routes>
+        {/* Landing Page */}
+        <Route path="/" element={<Landing />} />
+        
         {/* Public Routes - Auth */}
         <Route path="/login" element={<Login />} />
         <Route path="/setup" element={<FirmSetupProfessional />} />
@@ -99,9 +104,8 @@ function App() {
           </ProtectedRoute>
         } />
         
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/pricing" replace />} />
-        <Route path="*" element={<Navigate to="/pricing" replace />} />
+        {/* Catch all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );
