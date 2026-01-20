@@ -1,7 +1,7 @@
 {
-  "name": "casestack-backend",
-  "version": "2.0.0",
-  "description": "CASESTACK - AI-Powered Professional Case Management System",
+  "name": "legalstack-backend",
+  "version": "1.0.0",
+  "description": "LegalStack - Fair, accessible legal case management with economy-based pricing",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -56,12 +56,12 @@
     "npm": ">=9.0.0"
   },
   "keywords": [
-    "casestack",
+    "legalstack",
+    "legal-tech",
     "case-management",
-    "accounting",
-    "audit",
-    "ai-powered"
+    "law-firm",
+    "fair-pricing"
   ],
-  "author": "CASESTACK Team",
-  "license": "PROPRIETARY"
+  "author": "Make It Good",
+  "license": "MIT"
 }
