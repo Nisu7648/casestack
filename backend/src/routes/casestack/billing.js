@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
+const { authenticate } = require('../../middleware/auth.middleware');
 const { v4: uuidv4 } = require('uuid');
 
 const prisma = new PrismaClient();
+
+// Apply authentication to all routes
+router.use(authenticate);
 
 // ============================================
 // TIME TRACKING
