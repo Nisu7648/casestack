@@ -1,172 +1,80 @@
-# 🚀 CASESTACK
+# 🚀 LegalStack
 
-**AI-Powered Professional Case Management System**
+**Fair, accessible legal case management software with economy-based pricing for law firms worldwide.**
 
-Modern, secure, and scalable case management platform for accounting and audit firms.
+---
+
+## 💰 Pricing
+
+One plan. All features. Fair pricing based on your country's economy.
+
+- 🇬🇧 UK: £78/user/month
+- 🇺🇸 US: $75/user/month
+- 🇩🇪 Germany: €65/user/month
+- 🇮🇳 India: ₹4,800/user/month
+- 🇧🇷 Brazil: R$320/user/month
+
+**60+ countries supported. Same features for everyone.**
 
 ---
 
 ## ✨ Features
 
-- ✅ **16 Advanced Features** - Complete case management suite
-- ✅ **Multi-User Firms** - Team collaboration with role-based access
-- ✅ **AI Document Analysis** - Automated document processing
-- ✅ **Professional UI** - Modern, responsive design
-- ✅ **Secure Authentication** - JWT + Google OAuth support
-- ✅ **Real-time Updates** - Live collaboration features
+✅ Unlimited cases, clients, storage  
+✅ Advanced case management  
+✅ Document automation  
+✅ Client portal (white-labeled)  
+✅ Time tracking & billing  
+✅ Mobile apps (iOS & Android)  
+✅ API access  
+✅ 24/7 support  
+✅ Bank-level security  
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend:** React + TypeScript + Vite
+- **Backend:** Node.js + Express + MongoDB
+- **Hosting:** Render
+- **Payments:** Stripe
 
 ---
 
 ## 🚀 Quick Start
 
-### **Live Demo**
-
-- **Frontend:** https://casestack-frontend.onrender.com
-- **Backend API:** https://casestack-backend.onrender.com
-- **Health Check:** https://casestack-backend.onrender.com/health
-
-### **Local Development**
-
 ```bash
-# Clone repository
+# Clone
 git clone https://github.com/Nisu7648/casestack.git
 cd casestack
 
-# Backend setup
-cd backend
-npm install
-npx prisma generate
-npm start
-
-# Frontend setup (in new terminal)
-cd frontend
-npm install
-npm run dev
+# Install & Run
+chmod +x quickstart.sh
+./quickstart.sh
 ```
 
----
-
-## 📦 Tech Stack
-
-### **Backend**
-- Node.js + Express
-- PostgreSQL + Prisma ORM
-- JWT Authentication
-- bcrypt for password hashing
-
-### **Frontend**
-- React + TypeScript
-- Vite
-- TailwindCSS
-- Lucide Icons
-
-### **Deployment**
-- Render.com (Free tier)
-- Auto-deploy on push
-- HTTPS enabled
+Frontend: http://localhost:5173  
+Backend: http://localhost:3000
 
 ---
 
-## 🔧 Environment Variables
+## 📦 Deployment
 
-### **Backend (.env)**
-```env
-DATABASE_URL=postgresql://user:password@host:5432/database
-JWT_SECRET=your-secret-key
-NODE_ENV=production
-PORT=5000
-```
-
-### **Frontend (.env)**
-```env
-VITE_API_URL=https://casestack-backend.onrender.com
-```
+Automatic deployment via Render:
+- Frontend: https://legalstack-frontend.onrender.com
+- Backend: https://legalstack-backend.onrender.com
 
 ---
 
-## 📚 API Endpoints
+## 🌍 Make It Good
 
-### **Authentication**
-- `POST /api/auth/register` - Create account
-- `POST /api/auth/login` - Sign in
-- `GET /api/auth/verify` - Verify token
+Building fair, accessible legal tech for law firms worldwide.
 
-### **Firm Management**
-- `POST /api/firm/create` - Create firm
-- `GET /api/firm/details` - Get firm info
-- `PUT /api/firm/update` - Update firm
-
-### **Health**
-- `GET /health` - Health check
-- `GET /` - API info
+**Website:** Coming soon  
+**Support:** support@makeitgood.io
 
 ---
 
-## 🎯 Project Structure
+## 📄 License
 
-```
-casestack/
-├── backend/
-│   ├── src/
-│   │   ├── index.js              # Main server
-│   │   └── routes/
-│   │       └── casestack/
-│   │           ├── auth-simple.js    # Auth routes
-│   │           └── firm-simple.js    # Firm routes
-│   ├── prisma/
-│   │   └── schema.prisma         # Database schema
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   └── pages/
-│   │       └── casestack/
-│   │           └── FirmSetupProfessional.tsx
-│   └── package.json
-└── render.yaml                   # Render deployment config
-```
-
----
-
-## 🚀 Deployment
-
-### **Render.com (Recommended)**
-
-1. Fork this repository
-2. Create account on [Render.com](https://render.com)
-3. Connect your GitHub repository
-4. Render will auto-deploy using `render.yaml`
-5. Set environment variables in Render dashboard
-
-**Cost:** $0/month (Free tier)
-
----
-
-## 📝 License
-
-Proprietary - All rights reserved
-
----
-
-## 👥 Team
-
-Built by CASESTACK Team
-
----
-
-## 🔗 Links
-
-- **Live App:** https://casestack-frontend.onrender.com
-- **API Docs:** https://casestack-backend.onrender.com
-- **GitHub:** https://github.com/Nisu7648/casestack
-
----
-
-## ✅ Status
-
-- ✅ Backend: Live
-- ✅ Frontend: Live
-- ✅ Database: Connected
-- ✅ Authentication: Working
-- ✅ Firm Management: Working
-
-**Last Updated:** January 2024
+MIT License - See LICENSE file
