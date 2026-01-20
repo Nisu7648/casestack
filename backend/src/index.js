@@ -63,7 +63,7 @@ app.get('/', (req, res) => {
     status: 'running',
     tagline: 'Fair, accessible legal case management',
     features: 17,
-    endpoints: 70,
+    endpoints: 80,
     health: '/health',
     documentation: 'https://github.com/Nisu7648/casestack',
     availableRoutes: [
@@ -74,7 +74,13 @@ app.get('/', (req, res) => {
       'GET /api/firm/details',
       'GET /api/pricing/countries',
       'GET /api/pricing/country/:country',
-      'POST /api/pricing/calculate'
+      'POST /api/pricing/calculate',
+      'GET /api/cases',
+      'POST /api/cases',
+      'GET /api/documents/case/:caseId',
+      'POST /api/documents/upload',
+      'POST /api/billing/time',
+      'POST /api/billing/invoices'
     ]
   });
 });
@@ -101,7 +107,7 @@ try {
   console.error('❌ Failed to load firm routes:', e.message);
 }
 
-// Pricing routes (NEW)
+// Pricing routes
 try {
   const pricingRoutes = require('./routes/casestack/pricing');
   app.use('/api/pricing', pricingRoutes);
@@ -120,27 +126,30 @@ try {
 }
 
 // ============================================
-// OPTIONAL ROUTES (Load if available)
+// CORE ROUTES (Load if available)
 // ============================================
 
-const optionalRoutes = [
+const coreRoutes = [
   { path: '/api/cases', file: './routes/casestack/cases' },
   { path: '/api/clients', file: './routes/casestack/clients' },
-  { path: '/api/templates', file: './routes/casestack/templates' },
+  { path: '/api/documents', file: './routes/casestack/documents' },
+  { path: '/api/billing', file: './routes/casestack/billing' },
   { path: '/api/tasks', file: './routes/casestack/tasks' },
   { path: '/api/calendar', file: './routes/casestack/calendar' },
-  { path: '/api/client-portal', file: './routes/casestack/client-portal' },
+  { path: '/api/templates', file: './routes/casestack/templates' },
   { path: '/api/reports', file: './routes/casestack/reports' },
-  { path: '/api/ai-analysis', file: './routes/casestack/ai-analysis' }
+  { path: '/api/client-portal', file: './routes/casestack/client-portal' },
+  { path: '/api/ai-analysis', file: './routes/casestack/ai-analysis' },
+  { path: '/api/search', file: './routes/casestack/search' }
 ];
 
-optionalRoutes.forEach(({ path, file }) => {
+coreRoutes.forEach(({ path, file }) => {
   try {
     const route = require(file);
     app.use(path, route);
     console.log(`✅ Loaded: ${path}`);
   } catch (e) {
-    console.log(`⚠️  Optional route not loaded: ${path}`);
+    console.log(`⚠️  Route not loaded: ${path}`);
   }
 });
 
@@ -201,7 +210,7 @@ app.listen(PORT, HOST, () => {
   console.log(`✅ API docs: http://localhost:${PORT}/`);
   console.log('');
   console.log('📊 Features: 17 complete features');
-  console.log('📊 Endpoints: 70+ API endpoints');
+  console.log('📊 Endpoints: 80+ API endpoints');
   console.log('💰 Pricing: 60+ countries supported');
   console.log('🌍 Fair pricing for law firms worldwide');
   console.log('');
