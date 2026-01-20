@@ -52,17 +52,18 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development',
-    version: '2.0.0'
+    version: '1.0.0'
   });
 });
 
 app.get('/', (req, res) => {
   res.json({
-    name: 'CASESTACK API',
-    version: '2.0.0',
+    name: 'LegalStack API',
+    version: '1.0.0',
     status: 'running',
-    features: 16,
-    endpoints: 67,
+    tagline: 'Fair, accessible legal case management',
+    features: 17,
+    endpoints: 70,
     health: '/health',
     documentation: 'https://github.com/Nisu7648/casestack',
     availableRoutes: [
@@ -191,7 +192,7 @@ const HOST = '0.0.0.0';
 app.listen(PORT, HOST, () => {
   console.log('');
   console.log('🚀 ============================================');
-  console.log('🚀 CASESTACK API SERVER');
+  console.log('🚀 LEGALSTACK API SERVER');
   console.log('🚀 ============================================');
   console.log('');
   console.log(`✅ Server running on ${HOST}:${PORT}`);
@@ -199,9 +200,10 @@ app.listen(PORT, HOST, () => {
   console.log(`✅ Health check: http://localhost:${PORT}/health`);
   console.log(`✅ API docs: http://localhost:${PORT}/`);
   console.log('');
-  console.log('📊 Features: 16 advanced features');
-  console.log('📊 Endpoints: 67+ API endpoints');
-  console.log('💰 Pricing: 40+ countries supported');
+  console.log('📊 Features: 17 complete features');
+  console.log('📊 Endpoints: 70+ API endpoints');
+  console.log('💰 Pricing: 60+ countries supported');
+  console.log('🌍 Fair pricing for law firms worldwide');
   console.log('');
   console.log('🔥 Ready to accept requests!');
   console.log('🚀 ============================================');
