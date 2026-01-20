@@ -8,11 +8,12 @@ const { v4: uuidv4 } = require('uuid');
 const prisma = new PrismaClient();
 
 // ============================================
-// SIMPLE AUTHENTICATION - WITH FIRM CREATION
+// SIMPLE AUTHENTICATION - FIRM OPTIONAL
+// Just get users in, firm can be added later
 // ============================================
 
 // ============================================
-// 1. REGISTER (with firm)
+// 1. REGISTER (firm optional)
 // ============================================
 router.post('/register', async (req, res) => {
   try {
@@ -20,18 +21,15 @@ router.post('/register', async (req, res) => {
 
     console.log('Register attempt:', { email, firstName, lastName, firmName, country });
 
-    // Validate required fields
-    if (!email || !password || !firstName || !lastName || !firmName || !country) {
+    // Validate ONLY required fields
+    if (!email || !password || !firstName || !lastName) {
       return res.status(400).json({ 
-        error: 'All fields required',
-        required: ['email', 'password', 'firstName', 'lastName', 'firmName', 'country'],
+        error: 'Email, password, firstName, and lastName required',
         received: { 
           email: !!email, 
           password: !!password, 
           firstName: !!firstName, 
-          lastName: !!lastName,
-          firmName: !!firmName,
-          country: !!country
+          lastName: !!lastName
         }
       });
     }
@@ -56,34 +54,55 @@ router.post('/register', async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create firm and user in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create firm
-      const firm = await tx.firm.create({
-        data: {
-          id: uuidv4(),
-          name: firmName,
-          country: country,
-          billingEnabled: false
-        }
+    // If firm details provided, create firm + user. Otherwise just user.
+    let result;
+
+    if (firmName && country) {
+      // Create firm and user in transaction
+      result = await prisma.$transaction(async (tx) => {
+        const firm = await tx.firm.create({
+          data: {
+            id: uuidv4(),
+            name: firmName,
+            country: country,
+            billingEnabled: false
+          }
+        });
+
+        const user = await tx.user.create({
+          data: {
+            id: uuidv4(),
+            email: email.toLowerCase(),
+            password: hashedPassword,
+            firstName,
+            lastName,
+            role: 'ADMIN',
+            firmId: firm.id,
+            isActive: true
+          }
+        });
+
+        return { firm, user };
       });
 
-      // Create user
-      const user = await tx.user.create({
+      console.log('User and firm created:', result.user.id, result.firm.id);
+    } else {
+      // Just create user without firm
+      const user = await prisma.user.create({
         data: {
           id: uuidv4(),
           email: email.toLowerCase(),
           password: hashedPassword,
           firstName,
           lastName,
-          role: 'ADMIN',
-          firmId: firm.id,
+          role: 'USER',
           isActive: true
         }
       });
 
-      return { firm, user };
-    });
+      result = { user, firm: null };
+      console.log('User created (no firm):', user.id);
+    }
 
     // Generate token
     const token = jwt.sign(
@@ -91,13 +110,11 @@ router.post('/register', async (req, res) => {
         userId: result.user.id, 
         email: result.user.email, 
         role: result.user.role,
-        firmId: result.firm.id
+        firmId: result.user.firmId || null
       },
       process.env.JWT_SECRET || 'legalstack-secret-2024',
       { expiresIn: '7d' }
     );
-
-    console.log('User and firm created successfully:', result.user.id, result.firm.id);
 
     res.status(201).json({
       success: true,
@@ -108,12 +125,12 @@ router.post('/register', async (req, res) => {
         firstName: result.user.firstName,
         lastName: result.user.lastName,
         role: result.user.role,
-        firmId: result.firm.id,
-        firm: {
+        firmId: result.user.firmId || null,
+        firm: result.firm ? {
           id: result.firm.id,
           name: result.firm.name,
           country: result.firm.country
-        }
+        } : null
       }
     });
   } catch (error) {
@@ -173,7 +190,7 @@ router.post('/login', async (req, res) => {
         userId: user.id, 
         email: user.email, 
         role: user.role,
-        firmId: user.firmId
+        firmId: user.firmId || null
       },
       process.env.JWT_SECRET || 'legalstack-secret-2024',
       { expiresIn: '7d' }
@@ -190,7 +207,7 @@ router.post('/login', async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
-        firmId: user.firmId,
+        firmId: user.firmId || null,
         firm: user.firm ? {
           id: user.firm.id,
           name: user.firm.name,
@@ -247,7 +264,7 @@ router.get('/verify', async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
-        firmId: user.firmId,
+        firmId: user.firmId || null,
         firm: user.firm ? {
           id: user.firm.id,
           name: user.firm.name,
@@ -262,6 +279,25 @@ router.get('/verify', async (req, res) => {
       message: error.message
     });
   }
+});
+
+// ============================================
+// 4. QUICK TEST ENDPOINT
+// ============================================
+router.get('/test', (req, res) => {
+  res.json({
+    status: 'Auth routes working',
+    endpoints: {
+      register: 'POST /api/auth/register',
+      login: 'POST /api/auth/login',
+      verify: 'GET /api/auth/verify'
+    },
+    requiredFields: {
+      register: ['email', 'password', 'firstName', 'lastName'],
+      optionalFields: ['firmName', 'country'],
+      login: ['email', 'password']
+    }
+  });
 });
 
 module.exports = router;
