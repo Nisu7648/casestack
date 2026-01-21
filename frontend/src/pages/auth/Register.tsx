@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Building2, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react';
+import { Building2, Mail, Lock, User, AlertCircle, CheckCircle, Globe } from 'lucide-react';
 
 // ============================================
 // REGISTER PAGE
@@ -15,7 +15,7 @@ export default function Register() {
     firstName: '',
     lastName: '',
     firmName: '',
-    industry: ''
+    country: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -46,7 +46,7 @@ export default function Register() {
           firstName: formData.firstName,
           lastName: formData.lastName,
           firmName: formData.firmName,
-          industry: formData.industry
+          country: formData.country
         })
       });
 
@@ -57,7 +57,7 @@ export default function Register() {
         localStorage.setItem('user', JSON.stringify(data.user));
         navigate('/dashboard');
       } else {
-        setError(data.error || 'Registration failed');
+        setError(data.error || data.message || 'Registration failed');
       }
     } catch (error) {
       console.error('Registration error:', error);
@@ -75,8 +75,8 @@ export default function Register() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
             <Building2 className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">CaseStack</h1>
-          <p className="text-gray-600 mt-2">Create your enterprise account</p>
+          <h1 className="text-3xl font-bold text-gray-900">LegalStack</h1>
+          <p className="text-gray-600 mt-2">Create your account</p>
         </div>
 
         {/* Register Form */}
@@ -134,7 +134,7 @@ export default function Register() {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="you@company.com"
+                  placeholder="you@lawfirm.com"
                 />
               </div>
             </div>
@@ -151,20 +151,37 @@ export default function Register() {
                   value={formData.firmName}
                   onChange={(e) => setFormData({ ...formData, firmName: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Acme Consulting"
+                  placeholder="Smith & Associates"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Industry
+                  Country *
                 </label>
-                <input
-                  type="text"
-                  value={formData.industry}
-                  onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Consulting"
-                />
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <select
+                    required
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
+                  >
+                    <option value="">Select country</option>
+                    <option value="United States">United States</option>
+                    <option value="United Kingdom">United Kingdom</option>
+                    <option value="Canada">Canada</option>
+                    <option value="Australia">Australia</option>
+                    <option value="India">India</option>
+                    <option value="Germany">Germany</option>
+                    <option value="France">France</option>
+                    <option value="Spain">Spain</option>
+                    <option value="Italy">Italy</option>
+                    <option value="Netherlands">Netherlands</option>
+                    <option value="Singapore">Singapore</option>
+                    <option value="UAE">UAE</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -212,9 +229,9 @@ export default function Register() {
                 <div className="text-sm text-blue-700">
                   <p className="font-medium mb-1">You'll get:</p>
                   <ul className="space-y-1">
-                    <li>• Full access to all enterprise features</li>
+                    <li>• Full access to case management</li>
                     <li>• Admin role for your firm</li>
-                    <li>• Unlimited users and engagements</li>
+                    <li>• Unlimited cases and clients</li>
                     <li>• Complete audit trail</li>
                   </ul>
                 </div>
@@ -224,7 +241,7 @@ export default function Register() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
             >
               {loading ? 'Creating account...' : 'Create Account'}
             </button>
@@ -241,7 +258,7 @@ export default function Register() {
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          © 2024 CaseStack. Enterprise-grade consulting platform.
+          © 2024 LegalStack. Fair, accessible legal case management.
         </p>
       </div>
     </div>
