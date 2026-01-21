@@ -1,10 +1,9 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const fs = require('fs').promises;
-const path = require('path');
+const { deleteFile, getDownloadUrl, getSecureUrl } = require('../config/cloudinary');
 
 /**
- * Upload document
+ * Upload document to Cloudinary
  */
 const uploadDocument = async (req, res) => {
   try {
@@ -18,20 +17,31 @@ const uploadDocument = async (req, res) => {
       });
     }
 
+    // Cloudinary file data
+    const cloudinaryData = {
+      publicId: file.filename,
+      url: file.path,
+      secureUrl: file.secure_url || file.path,
+      format: file.format,
+      resourceType: file.resource_type,
+      bytes: file.bytes,
+    };
+
     // Create document record
     const document = await prisma.document.create({
       data: {
         name: file.originalname,
         fileName: file.filename,
-        filePath: file.path,
-        fileSize: file.size,
+        fileUrl: cloudinaryData.secureUrl,
+        fileSize: file.bytes || file.size,
         mimeType: file.mimetype,
-        category: category || 'OTHER',
+        type: category || 'OTHER',
         description,
-        tags: tags ? tags.split(',') : [],
         caseId,
         uploadedById: req.user.id,
-        version: 1
+        version: 1,
+        // Store Cloudinary metadata as JSON string
+        metadata: JSON.stringify(cloudinaryData)
       },
       include: {
         uploadedBy: {
@@ -47,7 +57,7 @@ const uploadDocument = async (req, res) => {
     // Create activity
     await prisma.caseActivity.create({
       data: {
-        action: 'CREATED',
+        action: 'UPLOADED',
         entity: 'document',
         entityId: document.id,
         description: `Uploaded document "${file.originalname}"`,
@@ -58,7 +68,7 @@ const uploadDocument = async (req, res) => {
 
     await req.logActivity('CREATE', 'Document', document.id, { 
       name: file.originalname,
-      size: file.size 
+      size: file.bytes || file.size
     });
 
     res.status(201).json({
@@ -70,7 +80,8 @@ const uploadDocument = async (req, res) => {
     console.error('Upload document error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to upload document'
+      message: 'Failed to upload document',
+      error: error.message
     });
   }
 };
@@ -91,18 +102,28 @@ const uploadMultipleDocuments = async (req, res) => {
     }
 
     const documents = await Promise.all(
-      files.map(file =>
-        prisma.document.create({
+      files.map(file => {
+        const cloudinaryData = {
+          publicId: file.filename,
+          url: file.path,
+          secureUrl: file.secure_url || file.path,
+          format: file.format,
+          resourceType: file.resource_type,
+          bytes: file.bytes,
+        };
+
+        return prisma.document.create({
           data: {
             name: file.originalname,
             fileName: file.filename,
-            filePath: file.path,
-            fileSize: file.size,
+            fileUrl: cloudinaryData.secureUrl,
+            fileSize: file.bytes || file.size,
             mimeType: file.mimetype,
-            category: category || 'OTHER',
+            type: category || 'OTHER',
             caseId,
             uploadedById: req.user.id,
-            version: 1
+            version: 1,
+            metadata: JSON.stringify(cloudinaryData)
           },
           include: {
             uploadedBy: {
@@ -113,14 +134,14 @@ const uploadMultipleDocuments = async (req, res) => {
               }
             }
           }
-        })
-      )
+        });
+      })
     );
 
     // Create activity
     await prisma.caseActivity.create({
       data: {
-        action: 'CREATED',
+        action: 'UPLOADED',
         entity: 'document',
         description: `Uploaded ${files.length} documents`,
         userId: req.user.id,
@@ -137,7 +158,8 @@ const uploadMultipleDocuments = async (req, res) => {
     console.error('Upload multiple documents error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to upload documents'
+      message: 'Failed to upload documents',
+      error: error.message
     });
   }
 };
@@ -152,7 +174,7 @@ const getDocumentsByCase = async (req, res) => {
 
     const where = { caseId };
     
-    if (category) where.category = category;
+    if (category) where.type = category;
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -169,10 +191,6 @@ const getDocumentsByCase = async (req, res) => {
             firstName: true,
             lastName: true
           }
-        },
-        versions: {
-          orderBy: { createdAt: 'desc' },
-          take: 5
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -183,7 +201,7 @@ const getDocumentsByCase = async (req, res) => {
 
     // Group by category
     const byCategory = documents.reduce((acc, doc) => {
-      acc[doc.category] = (acc[doc.category] || 0) + 1;
+      acc[doc.type] = (acc[doc.type] || 0) + 1;
       return acc;
     }, {});
 
@@ -224,19 +242,11 @@ const getDocumentById = async (req, res) => {
             lastName: true
           }
         },
-        versions: {
-          orderBy: { createdAt: 'desc' }
-        },
-        shares: {
-          include: {
-            sharedWith: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true
-              }
-            }
+        case: {
+          select: {
+            id: true,
+            title: true,
+            caseNumber: true
           }
         }
       }
@@ -280,22 +290,39 @@ const downloadDocument = async (req, res) => {
       });
     }
 
-    // Increment download count
-    await prisma.document.update({
-      where: { id },
+    // Parse metadata to get publicId
+    const metadata = JSON.parse(document.metadata || '{}');
+    const publicId = metadata.publicId || document.fileName;
+
+    // Generate download URL
+    const downloadUrl = getDownloadUrl(publicId, document.name);
+
+    // Log activity
+    await prisma.caseActivity.create({
       data: {
-        downloadCount: { increment: 1 },
-        lastAccessedAt: new Date()
+        action: 'DOWNLOADED',
+        entity: 'document',
+        entityId: document.id,
+        description: `Downloaded document "${document.name}"`,
+        userId: req.user.id,
+        caseId: document.caseId
       }
     });
 
-    // Send file
-    res.download(document.filePath, document.name);
+    res.json({
+      success: true,
+      data: {
+        downloadUrl,
+        fileName: document.name,
+        fileSize: document.fileSize,
+        mimeType: document.mimeType
+      }
+    });
   } catch (error) {
     console.error('Download document error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to download document'
+      message: 'Failed to generate download link'
     });
   }
 };
@@ -318,19 +345,30 @@ const previewDocument = async (req, res) => {
       });
     }
 
-    // Update last accessed
-    await prisma.document.update({
-      where: { id },
-      data: { lastAccessedAt: new Date() }
+    // Parse metadata
+    const metadata = JSON.parse(document.metadata || '{}');
+    const publicId = metadata.publicId || document.fileName;
+
+    // Generate secure preview URL
+    const previewUrl = getSecureUrl(publicId, {
+      transformation: [
+        { width: 800, crop: 'limit' }
+      ]
     });
 
-    // Send file for preview
-    res.sendFile(path.resolve(document.filePath));
+    res.json({
+      success: true,
+      data: {
+        previewUrl,
+        fileName: document.name,
+        mimeType: document.mimeType
+      }
+    });
   } catch (error) {
     console.error('Preview document error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to preview document'
+      message: 'Failed to generate preview'
     });
   }
 };
@@ -341,15 +379,14 @@ const previewDocument = async (req, res) => {
 const updateDocument = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, category, tags } = req.body;
+    const { name, description, type } = req.body;
 
     const document = await prisma.document.update({
       where: { id },
       data: {
         name,
         description,
-        category,
-        tags: tags ? tags.split(',') : undefined
+        type
       },
       include: {
         uploadedBy: {
@@ -361,6 +398,8 @@ const updateDocument = async (req, res) => {
         }
       }
     });
+
+    await req.logActivity('UPDATE', 'Document', id, { name, description, type });
 
     res.json({
       success: true,
@@ -394,15 +433,34 @@ const deleteDocument = async (req, res) => {
       });
     }
 
-    // Delete file from filesystem
+    // Parse metadata to get publicId
+    const metadata = JSON.parse(document.metadata || '{}');
+    const publicId = metadata.publicId || document.fileName;
+
+    // Delete from Cloudinary
     try {
-      await fs.unlink(document.filePath);
-    } catch (err) {
-      console.error('Error deleting file:', err);
+      await deleteFile(publicId);
+    } catch (cloudinaryError) {
+      console.error('Cloudinary delete error:', cloudinaryError);
+      // Continue with database deletion even if Cloudinary fails
     }
 
-    // Delete document record
-    await prisma.document.delete({ where: { id } });
+    // Delete from database
+    await prisma.document.delete({
+      where: { id }
+    });
+
+    // Create activity
+    await prisma.caseActivity.create({
+      data: {
+        action: 'DELETED',
+        entity: 'document',
+        entityId: id,
+        description: `Deleted document "${document.name}"`,
+        userId: req.user.id,
+        caseId: document.caseId
+      }
+    });
 
     await req.logActivity('DELETE', 'Document', id, { name: document.name });
 
@@ -420,32 +478,19 @@ const deleteDocument = async (req, res) => {
 };
 
 /**
- * Share document
+ * Share document (placeholder)
  */
 const shareDocument = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userIds, expiresAt, canDownload, canEdit } = req.body;
+    const { userIds, expiresAt } = req.body;
 
-    const shares = await Promise.all(
-      userIds.map(userId =>
-        prisma.documentShare.create({
-          data: {
-            documentId: id,
-            sharedWithId: userId,
-            sharedById: req.user.id,
-            expiresAt: expiresAt ? new Date(expiresAt) : null,
-            canDownload: canDownload !== false,
-            canEdit: canEdit || false
-          }
-        })
-      )
-    );
+    // TODO: Implement document sharing logic
+    // This could create share links or grant access to specific users
 
     res.json({
       success: true,
-      message: 'Document shared successfully',
-      data: shares
+      message: 'Document sharing feature coming soon'
     });
   } catch (error) {
     console.error('Share document error:', error);
@@ -457,29 +502,19 @@ const shareDocument = async (req, res) => {
 };
 
 /**
- * Get document versions
+ * Get document versions (placeholder)
  */
 const getDocumentVersions = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const versions = await prisma.documentVersion.findMany({
-      where: { documentId: id },
-      include: {
-        uploadedBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true
-          }
-        }
-      },
-      orderBy: { version: 'desc' }
-    });
+    // TODO: Implement versioning logic
+    // Could track versions in metadata or separate table
 
     res.json({
       success: true,
-      data: versions
+      message: 'Document versioning feature coming soon',
+      data: []
     });
   } catch (error) {
     console.error('Get versions error:', error);
@@ -491,7 +526,7 @@ const getDocumentVersions = async (req, res) => {
 };
 
 /**
- * Upload new version
+ * Upload new version (placeholder)
  */
 const uploadNewVersion = async (req, res) => {
   try {
@@ -505,55 +540,12 @@ const uploadNewVersion = async (req, res) => {
       });
     }
 
-    const document = await prisma.document.findUnique({
-      where: { id }
-    });
-
-    if (!document) {
-      return res.status(404).json({
-        success: false,
-        message: 'Document not found'
-      });
-    }
-
-    // Create version record for old file
-    await prisma.documentVersion.create({
-      data: {
-        documentId: id,
-        version: document.version,
-        fileName: document.fileName,
-        filePath: document.filePath,
-        fileSize: document.fileSize,
-        uploadedById: document.uploadedById
-      }
-    });
-
-    // Update document with new file
-    const updatedDocument = await prisma.document.update({
-      where: { id },
-      data: {
-        fileName: file.filename,
-        filePath: file.path,
-        fileSize: file.size,
-        mimeType: file.mimetype,
-        version: { increment: 1 },
-        uploadedById: req.user.id
-      },
-      include: {
-        uploadedBy: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true
-          }
-        }
-      }
-    });
+    // TODO: Implement versioning logic
+    // Could increment version number and keep old file
 
     res.json({
       success: true,
-      message: 'New version uploaded successfully',
-      data: updatedDocument
+      message: 'Document versioning feature coming soon'
     });
   } catch (error) {
     console.error('Upload version error:', error);
