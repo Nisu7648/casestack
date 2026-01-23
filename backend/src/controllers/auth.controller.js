@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const { validationResult } = require('express-validator');
 const { logActivity } = require('../middleware/activityLogger');
+const { sendWelcomeEmail } = require('../config/email');
 
 const prisma = new PrismaClient();
 
@@ -71,6 +72,11 @@ const register = async (req, res) => {
       result.user.id,
       { action: 'User registration', firmCreated: true }
     );
+
+    // Send welcome email (async, don't wait)
+    sendWelcomeEmail(result.user, firmName).catch(err => {
+      console.error('Failed to send welcome email:', err);
+    });
 
     // Generate JWT
     const token = jwt.sign(
