@@ -1,0 +1,425 @@
+/**
+ * Micro-interactions CSS
+ * Subtle animations and transitions for better UX
+ */
+
+/* ============================================
+   HOVER EFFECTS
+   ============================================ */
+
+/* Card hover effect */
+.card-hover {
+  @apply transition-all duration-200 ease-out;
+}
+
+.card-hover:hover {
+  @apply shadow-xl -translate-y-1;
+}
+
+/* Button press effect */
+.button-press {
+  @apply transition-transform duration-100 ease-out;
+}
+
+.button-press:active {
+  @apply scale-95;
+}
+
+/* Smooth scale on hover */
+.hover-scale {
+  @apply transition-transform duration-200 ease-out;
+}
+
+.hover-scale:hover {
+  @apply scale-105;
+}
+
+/* Subtle scale */
+.hover-scale-sm {
+  @apply transition-transform duration-200 ease-out;
+}
+
+.hover-scale-sm:hover {
+  @apply scale-102;
+}
+
+/* Glow effect on hover */
+.hover-glow {
+  @apply transition-shadow duration-300 ease-out;
+}
+
+.hover-glow:hover {
+  @apply shadow-lg shadow-primary-500/20;
+}
+
+/* Lift effect */
+.hover-lift {
+  @apply transition-all duration-200 ease-out;
+}
+
+.hover-lift:hover {
+  @apply -translate-y-0.5 shadow-md;
+}
+
+/* ============================================
+   FOCUS EFFECTS
+   ============================================ */
+
+/* Enhanced focus ring */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-shadow duration-200;
+}
+
+/* Focus ring for dark backgrounds */
+.focus-ring-dark {
+  @apply focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-neutral-900 transition-shadow duration-200;
+}
+
+/* Subtle focus */
+.focus-subtle {
+  @apply focus:outline-none focus:ring-1 focus:ring-primary-400 transition-shadow duration-200;
+}
+
+/* ============================================
+   LOADING STATES
+   ============================================ */
+
+/* Pulse animation */
+.pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Shimmer effect for loading */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    #f3f4f6 0%,
+    #e5e7eb 50%,
+    #f3f4f6 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Skeleton loading */
+.skeleton {
+  @apply animate-pulse bg-neutral-200 rounded;
+}
+
+/* ============================================
+   TRANSITIONS
+   ============================================ */
+
+/* Smooth color transition */
+.transition-colors-smooth {
+  @apply transition-colors duration-300 ease-out;
+}
+
+/* All properties transition */
+.transition-all-smooth {
+  @apply transition-all duration-300 ease-out;
+}
+
+/* Fast transition */
+.transition-fast {
+  @apply transition-all duration-150 ease-out;
+}
+
+/* Slow transition */
+.transition-slow {
+  @apply transition-all duration-500 ease-out;
+}
+
+/* ============================================
+   INTERACTIVE ELEMENTS
+   ============================================ */
+
+/* Clickable item */
+.clickable {
+  @apply cursor-pointer transition-all duration-200 ease-out;
+}
+
+.clickable:hover {
+  @apply bg-neutral-50;
+}
+
+.clickable:active {
+  @apply bg-neutral-100 scale-98;
+}
+
+/* Link hover effect */
+.link-hover {
+  @apply relative transition-colors duration-200;
+}
+
+.link-hover::after {
+  content: '';
+  @apply absolute bottom-0 left-0 w-0 h-0.5 bg-current transition-all duration-300;
+}
+
+.link-hover:hover::after {
+  @apply w-full;
+}
+
+/* Badge pulse */
+.badge-pulse {
+  @apply relative;
+}
+
+.badge-pulse::before {
+  content: '';
+  @apply absolute inset-0 rounded-full bg-current opacity-75;
+  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* ============================================
+   FORM ELEMENTS
+   ============================================ */
+
+/* Input focus effect */
+.input-focus {
+  @apply transition-all duration-200;
+}
+
+.input-focus:focus {
+  @apply border-primary-500 ring-2 ring-primary-500/20;
+}
+
+/* Checkbox/Radio animation */
+.checkbox-animate {
+  @apply transition-all duration-200 ease-out;
+}
+
+.checkbox-animate:checked {
+  @apply bg-primary-600 border-primary-600;
+}
+
+/* Toggle switch animation */
+.toggle-switch {
+  @apply transition-all duration-300 ease-out;
+}
+
+/* ============================================
+   NOTIFICATION ANIMATIONS
+   ============================================ */
+
+/* Slide in from right */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.slide-in-right {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Slide out to right */
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.slide-out-right {
+  animation: slideOutRight 0.3s ease-out;
+}
+
+/* Bounce in */
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.bounce-in {
+  animation: bounceIn 0.5s ease-out;
+}
+
+/* ============================================
+   UTILITY ANIMATIONS
+   ============================================ */
+
+/* Fade in */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Fade out */
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.fade-out {
+  animation: fadeOut 0.3s ease-out;
+}
+
+/* Zoom in */
+@keyframes zoomIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.zoom-in {
+  animation: zoomIn 0.3s ease-out;
+}
+
+/* Rotate */
+.rotate-on-hover {
+  @apply transition-transform duration-300 ease-out;
+}
+
+.rotate-on-hover:hover {
+  @apply rotate-180;
+}
+
+/* ============================================
+   PROGRESS INDICATORS
+   ============================================ */
+
+/* Progress bar animation */
+.progress-bar {
+  @apply transition-all duration-500 ease-out;
+}
+
+/* Indeterminate progress */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.progress-indeterminate {
+  animation: indeterminate 1.5s ease-in-out infinite;
+}
+
+/* ============================================
+   SPECIAL EFFECTS
+   ============================================ */
+
+/* Ripple effect */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+.ripple {
+  @apply absolute rounded-full bg-white/30;
+  animation: ripple 0.6s ease-out;
+}
+
+/* Shake animation (for errors) */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-10px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(10px);
+  }
+}
+
+.shake {
+  animation: shake 0.5s ease-out;
+}
+
+/* Success checkmark animation */
+@keyframes checkmark {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.checkmark-animate {
+  stroke-dasharray: 100;
+  animation: checkmark 0.5s ease-out forwards;
+}
+
+/* ============================================
+   RESPONSIVE HOVER (Desktop only)
+   ============================================ */
+
+@media (hover: hover) and (pointer: fine) {
+  .hover-desktop:hover {
+    @apply bg-neutral-50;
+  }
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
