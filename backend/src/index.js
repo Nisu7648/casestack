@@ -22,7 +22,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Body parsing
+// Body parsing (IMPORTANT: Stripe webhook needs raw body)
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -62,8 +63,8 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     status: 'running',
     tagline: 'Fair, accessible legal case management',
-    features: 20,
-    endpoints: 100,
+    features: 21,
+    endpoints: 110,
     health: '/health',
     documentation: 'https://github.com/Nisu7648/casestack',
     availableRoutes: [
@@ -87,7 +88,12 @@ app.get('/', (req, res) => {
       'POST /api/advanced/bulk/delete-cases',
       'GET /api/advanced/export/cases',
       'GET /api/advanced/activity-feed',
-      'GET /api/advanced/notifications'
+      'GET /api/advanced/notifications',
+      'GET /api/stripe/pricing',
+      'POST /api/stripe/create-checkout-session',
+      'POST /api/stripe/create-portal-session',
+      'GET /api/stripe/subscription',
+      'POST /api/stripe/webhook'
     ]
   });
 });
@@ -139,6 +145,15 @@ try {
   console.log('✅ Loaded: /api/advanced');
 } catch (e) {
   console.error('❌ Failed to load advanced routes:', e.message);
+}
+
+// Stripe payment routes
+try {
+  const stripeRoutes = require('./routes/stripe.routes');
+  app.use('/api/stripe', stripeRoutes);
+  console.log('✅ Loaded: /api/stripe');
+} catch (e) {
+  console.error('❌ Failed to load Stripe routes:', e.message);
 }
 
 // Google auth routes
@@ -203,7 +218,9 @@ app.use((req, res) => {
       'GET /api/emails/templates',
       'GET /api/advanced/search',
       'POST /api/advanced/bulk/delete-cases',
-      'GET /api/advanced/export/cases'
+      'GET /api/advanced/export/cases',
+      'GET /api/stripe/pricing',
+      'POST /api/stripe/create-checkout-session'
     ]
   });
 });
@@ -239,14 +256,15 @@ app.listen(PORT, HOST, () => {
   console.log(`✅ Health check: http://localhost:${PORT}/health`);
   console.log(`✅ API docs: http://localhost:${PORT}/`);
   console.log('');
-  console.log('📊 Features: 20 complete features');
-  console.log('📊 Endpoints: 100+ API endpoints');
+  console.log('📊 Features: 21 complete features');
+  console.log('📊 Endpoints: 110+ API endpoints');
   console.log('💰 Pricing: 60+ countries supported');
   console.log('📧 Email: SendGrid integration ready');
   console.log('☁️  Storage: Cloudinary file uploads');
   console.log('🔍 Search: Advanced multi-entity search');
   console.log('📤 Export: CSV export for cases & time');
   console.log('🔔 Notifications: Activity feed & alerts');
+  console.log('💳 Payments: Stripe integration ready');
   console.log('🌍 Fair pricing for law firms worldwide');
   console.log('');
   console.log('🔥 Ready to accept requests!');
