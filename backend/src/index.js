@@ -62,8 +62,8 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     status: 'running',
     tagline: 'Fair, accessible legal case management',
-    features: 17,
-    endpoints: 80,
+    features: 18,
+    endpoints: 90,
     health: '/health',
     documentation: 'https://github.com/Nisu7648/casestack',
     availableRoutes: [
@@ -80,7 +80,9 @@ app.get('/', (req, res) => {
       'GET /api/documents/case/:caseId',
       'POST /api/documents/upload',
       'POST /api/billing/time',
-      'POST /api/billing/invoices'
+      'POST /api/billing/invoices',
+      'POST /api/emails/test',
+      'GET /api/emails/templates'
     ]
   });
 });
@@ -114,6 +116,15 @@ try {
   console.log('✅ Loaded: /api/pricing');
 } catch (e) {
   console.error('❌ Failed to load pricing routes:', e.message);
+}
+
+// Email routes
+try {
+  const emailRoutes = require('./routes/email.routes');
+  app.use('/api/emails', emailRoutes);
+  console.log('✅ Loaded: /api/emails');
+} catch (e) {
+  console.error('❌ Failed to load email routes:', e.message);
 }
 
 // Google auth routes
@@ -173,7 +184,9 @@ app.use((req, res) => {
       'GET /api/firm/details',
       'GET /api/pricing/countries',
       'GET /api/pricing/country/:country',
-      'POST /api/pricing/calculate'
+      'POST /api/pricing/calculate',
+      'POST /api/emails/test',
+      'GET /api/emails/templates'
     ]
   });
 });
@@ -209,9 +222,11 @@ app.listen(PORT, HOST, () => {
   console.log(`✅ Health check: http://localhost:${PORT}/health`);
   console.log(`✅ API docs: http://localhost:${PORT}/`);
   console.log('');
-  console.log('📊 Features: 17 complete features');
-  console.log('📊 Endpoints: 80+ API endpoints');
+  console.log('📊 Features: 18 complete features');
+  console.log('📊 Endpoints: 90+ API endpoints');
   console.log('💰 Pricing: 60+ countries supported');
+  console.log('📧 Email: SendGrid integration ready');
+  console.log('☁️  Storage: Cloudinary file uploads');
   console.log('🌍 Fair pricing for law firms worldwide');
   console.log('');
   console.log('🔥 Ready to accept requests!');
